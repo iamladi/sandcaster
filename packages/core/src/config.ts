@@ -27,19 +27,20 @@ const KNOWN_FIELDS = new Set(Object.keys(SandcasterConfigSchema.shape));
 function validateField(
 	key: string,
 	value: unknown,
-): { ok: true; value: unknown } | { ok: false } {
+): { ok: true; value: unknown } | { ok: false; reason: string } {
 	const fieldSchema =
 		SandcasterConfigSchema.shape[
 			key as keyof typeof SandcasterConfigSchema.shape
 		];
 	if (!fieldSchema) {
-		return { ok: false };
+		return { ok: false, reason: "unknown field" };
 	}
 	const result = fieldSchema.safeParse(value);
 	if (result.success) {
 		return { ok: true, value: result.data };
 	}
-	return { ok: false };
+	const reason = result.error.issues[0]?.message ?? "invalid value";
+	return { ok: false, reason };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,23 +121,28 @@ export function loadConfig(dir?: string): SandcasterConfig | null {
 			continue;
 		}
 		const fieldResult = validateField(key, value);
-		if (fieldResult.ok) {
-			validated[key] = fieldResult.value;
-		} else {
+		if (!fieldResult.ok) {
 			console.warn(
-				`sandcaster.json: field "${key}" has an invalid value — ignoring`,
+				`sandcaster.json: field "${key}" invalid (${fieldResult.reason}) — ignoring`,
 			);
+			continue;
 		}
+		validated[key] = fieldResult.value;
 	}
 
-	// ── final schema parse (should always succeed given field-level validation) ─
+	// ── final schema parse ───────────────────────────────────────────────────
 	const parsed = SandcasterConfigSchema.safeParse(validated);
-	const config = parsed.success ? parsed.data : (validated as SandcasterConfig);
+	if (!parsed.success) {
+		console.error(
+			`sandcaster.json: config validation failed — ${parsed.error.message}`,
+		);
+		return null;
+	}
 
 	// ── update cache ──────────────────────────────────────────────────────────
-	_configCache = config;
+	_configCache = parsed.data;
 	_configMtime = mtime;
 	_cacheDir = resolvedDir;
 
-	return config;
+	return parsed.data;
 }

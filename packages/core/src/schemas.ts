@@ -62,34 +62,14 @@ function normalizePosixPath(rawPath: string): string | null {
 // Files field refinement + transform
 // ---------------------------------------------------------------------------
 
+const textEncoder = new TextEncoder();
+
 const filesSchema = z
 	.record(z.string(), z.string())
 	.superRefine((v, ctx) => {
 		const keys = Object.keys(v);
 
-		if (keys.length > 20) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.too_big,
-				maximum: 20,
-				inclusive: true,
-				type: "array",
-				message: `Too many files: ${keys.length} (max 20)`,
-			});
-			return z.NEVER;
-		}
-
-		const totalSize = Object.values(v).reduce(
-			(acc, content) => acc + Buffer.byteLength(content, "utf8"),
-			0,
-		);
-		if (totalSize > 10_000_000) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: `Total file size ${totalSize.toLocaleString()} bytes exceeds 10MB limit`,
-			});
-			return z.NEVER;
-		}
-
+		// Validate paths first (cheap) before measuring size (expensive)
 		for (const path of keys) {
 			if (
 				path.startsWith("/") ||
@@ -97,29 +77,45 @@ const filesSchema = z
 				WINDOWS_DRIVE_ABS_PATH.test(path)
 			) {
 				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
+					code: "custom",
 					message: `Absolute paths are not allowed: ${path}`,
 				});
-				return z.NEVER;
+				return;
 			}
 
 			const normalized = normalizePosixPath(path);
 			if (normalized === null) {
 				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
+					code: "custom",
 					message: `Path traversal not allowed: ${path}`,
 				});
-				return z.NEVER;
+				return;
 			}
+		}
+
+		if (keys.length > 20) {
+			ctx.addIssue({
+				code: "custom",
+				message: `Too many files: ${keys.length} (max 20)`,
+			});
+			return;
+		}
+
+		let totalSize = 0;
+		for (const content of Object.values(v)) {
+			totalSize += textEncoder.encode(content).byteLength;
+		}
+		if (totalSize > 10_000_000) {
+			ctx.addIssue({
+				code: "custom",
+				message: `Total file size ${totalSize.toLocaleString()} bytes exceeds 10MB limit`,
+			});
 		}
 	})
 	.transform((v) => {
 		const safe: Record<string, string> = {};
 		for (const [path, content] of Object.entries(v)) {
-			// normalizePosixPath cannot return null here — superRefine already
-			// rejected such paths
-			const normalized = normalizePosixPath(path) as string;
-			safe[normalized] = content;
+			safe[normalizePosixPath(path) as string] = content;
 		}
 		return safe;
 	});

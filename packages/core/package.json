@@ -17,6 +17,10 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@sandcaster/ts-config": "workspace:*"
+		"@sandcaster/ts-config": "workspace:*",
+		"@types/node": "^25.4.0"
+	},
+	"dependencies": {
+		"zod": "^4.3.6"
 	}
 }

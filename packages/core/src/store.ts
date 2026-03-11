@@ -71,9 +71,9 @@ export function createRunStore(opts?: {
 		filesCount = 0,
 	): Run {
 		// Evict oldest entry when at max capacity
-		if (order.length === maxEntries) {
-			const evicted = order.shift()!;
-			index.delete(evicted.id);
+		if (order.length >= maxEntries) {
+			const evicted = order.shift();
+			if (evicted) index.delete(evicted.id);
 		}
 
 		const run: Run = {
@@ -192,7 +192,8 @@ function _loadFromFile(
 			: tempOrder.slice(tempOrder.length - maxEntries);
 
 	for (const id of ids) {
-		const run = tempMap.get(id)!;
+		const run = tempMap.get(id);
+		if (!run) continue;
 		order.push(run);
 		index.set(run.id, run);
 	}

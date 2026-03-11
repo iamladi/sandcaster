@@ -188,11 +188,13 @@ describe("loadConfig", () => {
 		// model should be kept, maxTurns should be stripped
 		expect(result?.model).toBe("claude-sonnet-4-5");
 		expect(result?.maxTurns).toBeUndefined();
-		// A warning should have been emitted for maxTurns
+		// A warning should have been emitted for maxTurns with the reason
 		expect(warnSpy).toHaveBeenCalledTimes(1);
-		expect(
-			warnSpy.mock.calls.some((args) => String(args[0]).includes("maxTurns")),
-		).toBe(true);
+		const warnMsg = String(warnSpy.mock.calls[0][0]);
+		expect(warnMsg).toContain("maxTurns");
+		expect(warnMsg).toContain("invalid");
+		// Verify the "why" is included (Zod error reason)
+		expect(warnMsg).toMatch(/\(.+\)/); // parenthesized reason
 	});
 
 	// -------------------------------------------------------------------------

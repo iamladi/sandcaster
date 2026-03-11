@@ -90,13 +90,11 @@ describe("QueryRequestSchema", () => {
 	});
 
 	it("rejects files exceeding 10MB total", () => {
-		// 10MB + 1 byte distributed across 2 files
-		const bigContent = "a".repeat(5_000_001);
 		const result = QueryRequestSchema.safeParse({
 			prompt: "test",
 			files: {
-				"file1.txt": bigContent,
-				"file2.txt": bigContent,
+				"file1.txt": "a".repeat(5_000_001),
+				"file2.txt": "a".repeat(5_000_000),
 			},
 		});
 		expect(result.success).toBe(false);
@@ -111,6 +109,14 @@ describe("QueryRequestSchema", () => {
 		if (result.success) {
 			expect(result.data.files).toEqual({ "bar/baz.txt": "content" });
 		}
+	});
+
+	it("rejects paths that resolve to empty (e.g. 'foo/..')", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			files: { "foo/..": "data" },
+		});
+		expect(result.success).toBe(false);
 	});
 
 	it("rejects invalid extra agent names (spaces/special chars)", () => {

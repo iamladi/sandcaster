@@ -9,9 +9,22 @@
  * even when the OTel packages are not installed.
  */
 
+// ── Tracer / Span interfaces ─────────────────────────────────────────────────
+
+export interface SpanLike {
+	isRecording(): boolean;
+	setAttribute(key: string, value: unknown): void;
+	setStatus(status: string, description?: string): void;
+	recordException(exception: unknown): void;
+}
+
+export interface TracerLike {
+	startAsCurrentSpan<T>(name: string, fn: (span: SpanLike) => T): T;
+}
+
 // ── No-op fallback classes ───────────────────────────────────────────────────
 
-export class NoOpSpan {
+export class NoOpSpan implements SpanLike {
 	isRecording(): boolean {
 		return false;
 	}
@@ -29,10 +42,10 @@ export class NoOpSpan {
 	}
 }
 
-export class NoOpTracer {
-	startAsCurrentSpan<T>(name: string, fn: (span: NoOpSpan) => T): T;
-	startAsCurrentSpan(name: string, fn: (span: NoOpSpan) => void): void;
-	startAsCurrentSpan<T>(_name: string, fn: (span: NoOpSpan) => T): T {
+export class NoOpTracer implements TracerLike {
+	startAsCurrentSpan<T>(name: string, fn: (span: SpanLike) => T): T;
+	startAsCurrentSpan(name: string, fn: (span: SpanLike) => void): void;
+	startAsCurrentSpan<T>(_name: string, fn: (span: SpanLike) => T): T {
 		return fn(new NoOpSpan());
 	}
 }
@@ -55,10 +68,17 @@ function _isEnabled(): boolean {
 	return process.env.SANDCASTER_TELEMETRY?.trim() === "1";
 }
 
+// Dynamic import wrapper prevents TypeScript from statically resolving
+// optional OTel module specifiers (they're not installed as dependencies).
+// biome-ignore lint/suspicious/noExplicitAny: dynamic optional imports
+async function _optionalImport(specifier: string): Promise<any> {
+	return import(specifier);
+}
+
 // ── Initialisation ───────────────────────────────────────────────────────────
 
 export async function initTelemetry(): Promise<void> {
-	if (!_isEnabled()) {
+	if (_enabled || !_isEnabled()) {
 		return;
 	}
 
@@ -103,23 +123,15 @@ export async function initTelemetry(): Promise<void> {
 	};
 
 	try {
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		otelCore = (await import("@opentelemetry/api")) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		sdkResources = (await import("@opentelemetry/resources")) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		sdkTrace = (await import("@opentelemetry/sdk-trace-base")) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		sdkTraceExport = (await import("@opentelemetry/sdk-trace-base")) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		sdkMetrics = (await import("@opentelemetry/sdk-metrics")) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const logsApi = (await import("@opentelemetry/sdk-logs")) as any;
-		sdkLogs = logsApi;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const logsHandler = (await import(
-			"@opentelemetry/winston-transport"
-		)) as any;
+		otelCore = await _optionalImport("@opentelemetry/api");
+		sdkResources = await _optionalImport("@opentelemetry/resources");
+		sdkTrace = await _optionalImport("@opentelemetry/sdk-trace-base");
+		sdkTraceExport = await _optionalImport("@opentelemetry/sdk-trace-base");
+		sdkMetrics = await _optionalImport("@opentelemetry/sdk-metrics");
+		sdkLogs = await _optionalImport("@opentelemetry/sdk-logs");
+		const logsHandler = await _optionalImport(
+			"@opentelemetry/winston-transport",
+		);
 		LoggingHandler =
 			logsHandler.OpenTelemetryTransport ?? logsHandler.LoggingHandler;
 	} catch {
@@ -142,34 +154,28 @@ export async function initTelemetry(): Promise<void> {
 	let OTLPLogExporter: new () => unknown;
 
 	if (protocol === "http/protobuf") {
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const traceHttp = (await import(
-			"@opentelemetry/exporter-trace-otlp-http"
-		)) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const metricsHttp = (await import(
-			"@opentelemetry/exporter-metrics-otlp-http"
-		)) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const logsHttp = (await import(
-			"@opentelemetry/exporter-logs-otlp-http"
-		)) as any;
+		const traceHttp = await _optionalImport(
+			"@opentelemetry/exporter-trace-otlp-http",
+		);
+		const metricsHttp = await _optionalImport(
+			"@opentelemetry/exporter-metrics-otlp-http",
+		);
+		const logsHttp = await _optionalImport(
+			"@opentelemetry/exporter-logs-otlp-http",
+		);
 		OTLPSpanExporter = traceHttp.OTLPTraceExporter;
 		OTLPMetricExporter = metricsHttp.OTLPMetricExporter;
 		OTLPLogExporter = logsHttp.OTLPLogExporter;
 	} else {
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const traceGrpc = (await import(
-			"@opentelemetry/exporter-trace-otlp-grpc"
-		)) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const metricsGrpc = (await import(
-			"@opentelemetry/exporter-metrics-otlp-grpc"
-		)) as any;
-		// biome-ignore lint/suspicious/noExplicitAny: dynamic OTel imports
-		const logsGrpc = (await import(
-			"@opentelemetry/exporter-logs-otlp-grpc"
-		)) as any;
+		const traceGrpc = await _optionalImport(
+			"@opentelemetry/exporter-trace-otlp-grpc",
+		);
+		const metricsGrpc = await _optionalImport(
+			"@opentelemetry/exporter-metrics-otlp-grpc",
+		);
+		const logsGrpc = await _optionalImport(
+			"@opentelemetry/exporter-logs-otlp-grpc",
+		);
 		OTLPSpanExporter = traceGrpc.OTLPTraceExporter;
 		OTLPMetricExporter = metricsGrpc.OTLPMetricExporter;
 		OTLPLogExporter = logsGrpc.OTLPLogExporter;
@@ -279,9 +285,9 @@ export async function initTelemetry(): Promise<void> {
 
 // ── Tracer accessor ──────────────────────────────────────────────────────────
 
-export function getTracer(): NoOpTracer {
+export function getTracer(): TracerLike {
 	if (_tracer !== null) {
-		return _tracer as NoOpTracer;
+		return _tracer as TracerLike;
 	}
 	return new NoOpTracer();
 }
@@ -370,9 +376,4 @@ export function recordWebhookEvent(opts?: { eventType?: string }): void {
 			"sandcaster.webhook.event_type": opts?.eventType ?? "",
 		});
 	}
-}
-
-// Re-export enabled flag for introspection
-export function isTelemetryEnabled(): boolean {
-	return _enabled;
 }
