@@ -86,7 +86,7 @@ export function buildSkillsXml(skills: SkillInfo[]): string {
 	for (const skill of enabled) {
 		const body = extractBody(skill.content).trim();
 		lines.push(
-			`<skill name="${skill.name}" description="${skill.description}">${body}</skill>`,
+			`<skill name="${escapeXml(skill.name)}" description="${escapeXml(skill.description)}">${escapeXml(body)}</skill>`,
 		);
 	}
 
@@ -97,6 +97,18 @@ export function buildSkillsXml(skills: SkillInfo[]): string {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Escape special XML characters to prevent injection in XML attributes and content.
+ */
+function escapeXml(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
+}
 
 /**
  * Parse YAML frontmatter from the start of a markdown file.

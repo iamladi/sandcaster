@@ -60,7 +60,7 @@ export function createEventTranslator(): {
 				}
 
 				const last = assistantMessages[assistantMessages.length - 1];
-				const costUsd = last.usage.cost.total;
+				const costUsd = last.usage?.cost?.total;
 				const model = last.model;
 				const numTurns = assistantMessages.length;
 

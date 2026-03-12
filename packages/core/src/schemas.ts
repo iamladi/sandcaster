@@ -213,7 +213,7 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 		type: z.literal("tool_result"),
 		content: z.string(),
 		toolName: z.string(),
-		isError: z.boolean().optional(),
+		isError: z.boolean().default(false),
 	}),
 	z.object({
 		type: z.literal("thinking"),

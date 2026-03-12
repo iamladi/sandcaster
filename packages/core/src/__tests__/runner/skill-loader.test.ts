@@ -278,17 +278,18 @@ describe("buildSkillsXml", () => {
 		expect(result).toContain("># Plain skill");
 	});
 
-	it("handles special XML characters in content by including them as-is", () => {
+	it("escapes special XML characters in content", () => {
 		const result = buildSkillsXml([
 			{
 				name: "xml-skill",
-				description: "Has XML chars",
+				description: 'Has "XML" chars',
 				content: "---\nname: xml-skill\n---\n\nUse <tag> & 'quotes'",
 				disableModelInvocation: false,
 			},
 		]);
-		// The body content is placed inside the skill tag
-		expect(result).toContain("<tag>");
-		expect(result).toContain("&");
+		expect(result).toContain("&lt;tag&gt;");
+		expect(result).toContain("&amp;");
+		expect(result).toContain("&apos;quotes&apos;");
+		expect(result).toContain('description="Has &quot;XML&quot; chars"');
 	});
 });
