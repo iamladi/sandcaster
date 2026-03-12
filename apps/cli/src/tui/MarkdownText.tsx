@@ -1,4 +1,4 @@
-import { Text, useStdoutDimensions } from "ink";
+import { Text, useStdout } from "ink";
 import { Marked } from "marked";
 import { markedTerminal } from "marked-terminal";
 import { useMemo } from "react";
@@ -16,7 +16,8 @@ export function MarkdownText({
 	content,
 	streaming,
 }: MarkdownTextProps): React.ReactElement {
-	const [columns] = useStdoutDimensions();
+	const { stdout } = useStdout();
+	const columns = stdout?.columns ?? 80;
 
 	const rendered = useMemo(() => {
 		if (!content) return "";

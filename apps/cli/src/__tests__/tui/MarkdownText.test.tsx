@@ -6,7 +6,7 @@ vi.mock("ink", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("ink")>();
 	return {
 		...actual,
-		useStdoutDimensions: () => [80, 24],
+		useStdout: () => ({ stdout: { columns: 80, rows: 24 } }),
 	};
 });
 
