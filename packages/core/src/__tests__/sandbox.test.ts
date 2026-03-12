@@ -13,11 +13,48 @@ import {
 // ---------------------------------------------------------------------------
 
 // Mock e2b at the module boundary — it is a system dependency
+// Error classes must be defined inside the factory because vi.mock is hoisted
 vi.mock("e2b", () => {
+	class NotFoundError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = "NotFoundError";
+		}
+	}
+	class AuthenticationError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = "AuthenticationError";
+		}
+	}
+	class RateLimitError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = "RateLimitError";
+		}
+	}
+	class TimeoutError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = "TimeoutError";
+		}
+	}
+	class TemplateError extends Error {
+		constructor(message: string) {
+			super(message);
+			this.name = "TemplateError";
+		}
+	}
+
 	return {
 		Sandbox: {
 			create: vi.fn(),
 		},
+		NotFoundError,
+		AuthenticationError,
+		RateLimitError,
+		TimeoutError,
+		TemplateError,
 	};
 });
 
@@ -54,7 +91,14 @@ vi.mock("node:fs", async (importOriginal) => {
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { Sandbox } from "e2b";
+import {
+	AuthenticationError,
+	TimeoutError as E2BTimeoutError,
+	NotFoundError,
+	RateLimitError,
+	Sandbox,
+	TemplateError,
+} from "e2b";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
@@ -113,12 +157,21 @@ function makeFakeSandbox(stdoutLines: string[] = []) {
 describe("runAgentInSandbox", () => {
 	let createMock: MockInstance;
 
+	let savedE2bKey: string | undefined;
+
 	beforeEach(() => {
+		savedE2bKey = process.env.E2B_API_KEY;
+		process.env.E2B_API_KEY = "test-e2b-key";
 		createMock = vi.mocked(Sandbox.create);
 		vi.clearAllMocks();
 	});
 
 	afterEach(() => {
+		if (savedE2bKey !== undefined) {
+			process.env.E2B_API_KEY = savedE2bKey;
+		} else {
+			delete process.env.E2B_API_KEY;
+		}
 		vi.clearAllMocks();
 	});
 
@@ -138,21 +191,21 @@ describe("runAgentInSandbox", () => {
 		// Sandbox was created
 		expect(createMock).toHaveBeenCalledOnce();
 
-		// Runner file was uploaded
+		// Runner file was uploaded (must be next to /opt/sandcaster/node_modules)
 		expect(sbx.files.write).toHaveBeenCalledWith(
-			"/opt/runner.mjs",
+			"/opt/sandcaster/runner.mjs",
 			expect.any(String),
 		);
 
 		// Config was uploaded
 		expect(sbx.files.write).toHaveBeenCalledWith(
-			"/opt/agent_config.json",
+			"/opt/sandcaster/agent_config.json",
 			expect.any(String),
 		);
 
 		// Runner was executed
 		expect(sbx.commands.run).toHaveBeenCalledWith(
-			"node /opt/runner.mjs",
+			"node /opt/sandcaster/runner.mjs",
 			expect.any(Object),
 		);
 
@@ -232,20 +285,18 @@ describe("runAgentInSandbox", () => {
 	// Error handling
 	// -------------------------------------------------------------------------
 
-	it("throws SandboxError with stage='create' when sandbox creation fails", async () => {
+	it("yields error event with code and hint when sandbox creation fails", async () => {
 		createMock.mockRejectedValue(new Error("network error"));
 
-		let thrown: unknown;
-		try {
-			for await (const _ of runAgentInSandbox({ request: makeRequest() })) {
-				// consume
-			}
-		} catch (err) {
-			thrown = err;
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
 		}
 
-		expect(thrown).toBeInstanceOf(SandboxError);
-		expect((thrown as SandboxError).stage).toBe("create");
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent?.type).toBe("error");
+		expect(errorEvent).toHaveProperty("code");
 	});
 
 	it("yields error event when runner crashes (non-creation failure)", async () => {
@@ -333,7 +384,7 @@ describe("runAgentInSandbox", () => {
 		}
 
 		const configWriteCall = sbx.files.write.mock.calls.find(
-			(call: string[]) => call[0] === "/opt/agent_config.json",
+			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
 		) as string[];
 		expect(configWriteCall).toBeDefined();
 
@@ -419,5 +470,135 @@ describe("runAgentInSandbox", () => {
 	it("SandboxError is instanceof Error", () => {
 		const err = new SandboxError("failed", "create");
 		expect(err).toBeInstanceOf(Error);
+	});
+
+	// -------------------------------------------------------------------------
+	// Error classification
+	// -------------------------------------------------------------------------
+
+	it("yields error event with E2B_AUTH code when API key is missing", async () => {
+		const originalKey = process.env.E2B_API_KEY;
+		delete process.env.E2B_API_KEY;
+
+		const events = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ apiKeys: {} }),
+		})) {
+			events.push(event);
+		}
+
+		process.env.E2B_API_KEY = originalKey;
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "E2B_AUTH",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+		expect(createMock).not.toHaveBeenCalled();
+	});
+
+	it("yields error event with TEMPLATE_NOT_FOUND code for NotFoundError", async () => {
+		createMock.mockRejectedValue(new NotFoundError("template 'bad' not found"));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "TEMPLATE_NOT_FOUND",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+	});
+
+	it("yields error event with E2B_AUTH code for AuthenticationError", async () => {
+		createMock.mockRejectedValue(new AuthenticationError("invalid api key"));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "E2B_AUTH",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+	});
+
+	it("yields error event with RATE_LIMIT code for RateLimitError", async () => {
+		createMock.mockRejectedValue(new RateLimitError("rate limit exceeded"));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "RATE_LIMIT",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+	});
+
+	it("yields error event with SANDBOX_TIMEOUT code for TimeoutError", async () => {
+		createMock.mockRejectedValue(
+			new E2BTimeoutError("sandbox creation timed out"),
+		);
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "SANDBOX_TIMEOUT",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+	});
+
+	it("yields error event with TEMPLATE_INCOMPATIBLE code for TemplateError", async () => {
+		createMock.mockRejectedValue(new TemplateError("template incompatible"));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "TEMPLATE_INCOMPATIBLE",
+		});
+		expect(errorEvent).toHaveProperty("hint");
+	});
+
+	it("yields error event with SANDBOX_ERROR code for unknown errors", async () => {
+		createMock.mockRejectedValue(new Error("something unexpected"));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "SANDBOX_ERROR",
+		});
 	});
 });

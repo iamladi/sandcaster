@@ -12,7 +12,7 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsc && bunx vite build --config vite.config.runner.ts",
 		"lint": "biome check .",
 		"test": "vitest run"
 	},

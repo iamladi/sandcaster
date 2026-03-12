@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { Sandbox } from "e2b";
+import {
+	AuthenticationError,
+	TimeoutError as E2BTimeoutError,
+	NotFoundError,
+	RateLimitError,
+	Sandbox,
+	TemplateError,
+} from "e2b";
 import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
@@ -26,7 +33,7 @@ let _runnerBundle: string | undefined;
 function _getRunnerBundle(): string {
 	if (_runnerBundle === undefined) {
 		_runnerBundle = readFileSync(
-			resolve(__dirname, "runner/dist/runner.mjs"),
+			resolve(__dirname, "runner/runner.mjs"),
 			"utf-8",
 		);
 	}
@@ -61,6 +68,55 @@ export interface RunOptions {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Classify an E2B sandbox-creation error into a SandcasterEvent with code + hint */
+function classifySandboxError(err: unknown, template: string): SandcasterEvent {
+	if (err instanceof NotFoundError) {
+		return {
+			type: "error",
+			content: `Sandbox template '${template}' not found.`,
+			code: "TEMPLATE_NOT_FOUND",
+			hint: "Run: bun run scripts/create-template.ts",
+		};
+	}
+	if (err instanceof AuthenticationError) {
+		return {
+			type: "error",
+			content: "E2B authentication failed.",
+			code: "E2B_AUTH",
+			hint: "Check your E2B_API_KEY. Get one at https://e2b.dev/dashboard",
+		};
+	}
+	if (err instanceof RateLimitError) {
+		return {
+			type: "error",
+			content: "E2B rate limit exceeded.",
+			code: "RATE_LIMIT",
+			hint: "E2B rate limit — wait and retry",
+		};
+	}
+	if (err instanceof E2BTimeoutError) {
+		return {
+			type: "error",
+			content: "Sandbox creation timed out.",
+			code: "SANDBOX_TIMEOUT",
+			hint: "Sandbox creation timed out — try again or increase timeout",
+		};
+	}
+	if (err instanceof TemplateError) {
+		return {
+			type: "error",
+			content: `Sandbox template '${template}' is incompatible.`,
+			code: "TEMPLATE_INCOMPATIBLE",
+			hint: "Template needs rebuild — run: bun run scripts/create-template.ts",
+		};
+	}
+	return {
+		type: "error",
+		content: `Failed to create sandbox: ${err instanceof Error ? err.message : String(err)}`,
+		code: "SANDBOX_ERROR",
+	};
+}
 
 /** Build the env vars to pass into the E2B sandbox */
 function buildEnvs(request: QueryRequest): Record<string, string> {
@@ -137,10 +193,23 @@ export async function* runAgentInSandbox(
 ): AsyncGenerator<SandcasterEvent> {
 	const { request, config, requestId } = options;
 
-	const template = process.env.SANDCASTER_TEMPLATE ?? "sandcaster";
+	const template = process.env.SANDCASTER_TEMPLATE ?? "sandcaster-v1";
 	const timeoutSecs = request.timeout ?? config?.timeout ?? 300;
 	const timeoutMs = timeoutSecs * 1000;
 	const apiKey = request.apiKeys?.e2b ?? process.env.E2B_API_KEY;
+
+	// ------------------------------------------------------------------
+	// 0. Guard missing E2B API key
+	// ------------------------------------------------------------------
+	if (!apiKey) {
+		yield {
+			type: "error" as const,
+			content: "E2B API key is not set.",
+			code: "E2B_AUTH",
+			hint: "Set E2B_API_KEY in your environment or .env file. Get one at https://e2b.dev/dashboard",
+		};
+		return;
+	}
 
 	// ------------------------------------------------------------------
 	// 1. Create sandbox
@@ -156,25 +225,23 @@ export async function* runAgentInSandbox(
 			},
 		});
 	} catch (err) {
-		throw new SandboxError(
-			`Failed to create sandbox: ${err instanceof Error ? err.message : String(err)}`,
-			"create",
-			err,
-		);
+		yield classifySandboxError(err, template);
+		return;
 	}
 
 	try {
 		// ------------------------------------------------------------------
-		// 2. Upload runner bundle
+		// 2. Upload runner bundle (must live next to /opt/sandcaster/node_modules
+		//    so Node.js module resolution can find the pre-installed deps)
 		// ------------------------------------------------------------------
-		await sbx.files.write("/opt/runner.mjs", _getRunnerBundle());
+		await sbx.files.write("/opt/sandcaster/runner.mjs", _getRunnerBundle());
 
 		// ------------------------------------------------------------------
 		// 3. Upload agent config
 		// ------------------------------------------------------------------
 		const agentConfig = buildAgentConfig(request, config);
 		await sbx.files.write(
-			"/opt/agent_config.json",
+			"/opt/sandcaster/agent_config.json",
 			JSON.stringify(agentConfig),
 		);
 
@@ -208,6 +275,7 @@ export async function* runAgentInSandbox(
 		const stream = new PassThrough({ objectMode: true });
 
 		let stdoutBuffer = "";
+		let _stderrBuffer = "";
 		const onStdout = (data: string) => {
 			stdoutBuffer += data;
 			const lines = stdoutBuffer.split("\n");
@@ -219,11 +287,11 @@ export async function* runAgentInSandbox(
 
 		// Run the command — when it resolves/rejects, we end the stream
 		const runPromise = sbx.commands
-			.run("node /opt/runner.mjs", {
+			.run("node /opt/sandcaster/runner.mjs", {
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
-				onStderr: (_data: string) => {
-					// stderr is captured but not streamed as events here
+				onStderr: (data: string) => {
+					_stderrBuffer += data;
 				},
 			})
 			.then(() => {
@@ -255,9 +323,14 @@ export async function* runAgentInSandbox(
 			}
 		} catch (streamErr) {
 			// Stream was destroyed due to runner crash — yield error event
+			const errMsg =
+				streamErr instanceof Error ? streamErr.message : String(streamErr);
+			const detail = _stderrBuffer.trim()
+				? `${errMsg}\nstderr: ${_stderrBuffer.trim().slice(0, 500)}`
+				: errMsg;
 			yield {
 				type: "error",
-				content: `Runner error: ${streamErr instanceof Error ? streamErr.message : String(streamErr)}`,
+				content: `Runner error: ${detail}`,
 				code: "RUNNER_ERROR",
 			} satisfies SandcasterEvent;
 		}
