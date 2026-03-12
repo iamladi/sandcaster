@@ -6,7 +6,7 @@
 			"outputs": ["dist/**"]
 		},
 		"test": {
-			"dependsOn": ["^build"]
+			"dependsOn": ["build"]
 		},
 		"test:e2e": {
 			"dependsOn": ["build"]
