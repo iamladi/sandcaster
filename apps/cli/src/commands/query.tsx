@@ -9,6 +9,9 @@ import {
 	runAgentInSandbox,
 } from "@sandcaster/core";
 import { defineCommand } from "citty";
+import { render as inkRender } from "ink";
+import type { ReactElement } from "react";
+import { App } from "../tui/App.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,12 +27,15 @@ export interface QueryArgs {
 	noTui: boolean;
 }
 
+export type InkInstance = ReturnType<typeof inkRender>;
+
 export interface QueryDeps {
 	runAgent: (options: RunOptions) => AsyncGenerator<SandcasterEvent>;
 	loadConfig: (dir?: string) => SandcasterConfig | null;
 	stdout: { write: (data: string) => boolean };
 	readFile: (path: string) => string;
 	exit: (code: number) => void;
+	render?: (element: ReactElement) => InkInstance;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +53,14 @@ export async function executeQuery(
 	if (args.file && args.file.length > 0) {
 		files = {};
 		for (const filePath of args.file) {
-			files[filePath] = deps.readFile(filePath);
+			try {
+				files[filePath] = deps.readFile(filePath);
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				deps.stdout.write(`Error reading file ${filePath}: ${msg}\n`);
+				deps.exit(1);
+				return;
+			}
 		}
 	}
 
@@ -77,11 +90,12 @@ export async function executeQuery(
 		}
 		deps.exit(exitCode);
 	} else {
-		// TUI path — stub for Phase 2
-		// TODO: render Ink <App> component
-		for await (const event of deps.runAgent(options)) {
-			deps.stdout.write(`${JSON.stringify(event)}\n`);
-		}
+		const generator = deps.runAgent(options);
+		const renderFn = deps.render ?? inkRender;
+		const instance = renderFn(
+			<App eventSource={generator} onExit={deps.exit} />,
+		);
+		await instance.waitUntilExit();
 	}
 }
 
@@ -95,6 +109,7 @@ const prodDeps: QueryDeps = {
 	stdout: process.stdout,
 	readFile: (path: string) => readFileSync(path, "utf-8"),
 	exit: (code: number) => process.exit(code),
+	render: inkRender,
 };
 
 // ---------------------------------------------------------------------------
@@ -147,8 +162,20 @@ export const queryCommand = defineCommand({
 		const files = fileArg ? (Array.isArray(fileArg) ? fileArg : [fileArg]) : [];
 
 		const maxTurnsRaw = args["max-turns"];
-		const maxTurns =
-			maxTurnsRaw !== undefined ? Number(maxTurnsRaw) : undefined;
+		let maxTurns: number | undefined;
+		if (maxTurnsRaw !== undefined) {
+			maxTurns = Number(maxTurnsRaw);
+			if (!Number.isFinite(maxTurns) || maxTurns < 1) {
+				console.error(`Invalid --max-turns value: ${maxTurnsRaw}`);
+				process.exit(1);
+			}
+		}
+
+		const timeout = Number(args.timeout);
+		if (!Number.isFinite(timeout) || timeout < 1) {
+			console.error(`Invalid --timeout value: ${args.timeout}`);
+			process.exit(1);
+		}
 
 		const providerRaw = args.provider as string | undefined;
 		const validProviders = [
@@ -169,7 +196,7 @@ export const queryCommand = defineCommand({
 				model: args.model as string | undefined,
 				provider,
 				file: files,
-				timeout: Number(args.timeout),
+				timeout,
 				maxTurns,
 				noTui: args["no-tui"] as boolean,
 			},

@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 import { defineCommand, runMain } from "citty";
+import type { QueryArgs } from "./commands/query.js";
 import { queryCommand } from "./commands/query.js";
+
+export const defaultQueryArgs: Omit<QueryArgs, "prompt"> = {
+	file: [],
+	timeout: 300,
+	noTui: false,
+	model: undefined,
+	provider: undefined,
+	maxTurns: undefined,
+};
 
 const main = defineCommand({
 	meta: {
@@ -49,15 +59,7 @@ const main = defineCommand({
 			);
 			const { readFileSync } = await import("node:fs");
 			await executeQuery(
-				{
-					prompt,
-					file: [],
-					timeout: 300,
-					noTui: false,
-					model: undefined,
-					provider: undefined,
-					maxTurns: undefined,
-				},
+				{ prompt, ...defaultQueryArgs },
 				{
 					runAgent: runAgentInSandbox,
 					loadConfig,

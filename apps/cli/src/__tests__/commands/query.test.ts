@@ -27,13 +27,28 @@ async function* makeGenerator(
 	}
 }
 
+function makeFakeInkInstance(resolveWith: () => void): {
+	waitUntilExit: () => Promise<void>;
+	unmount: () => void;
+	rerender: () => void;
+	cleanup: () => void;
+	clear: () => void;
+} {
+	return {
+		waitUntilExit: () =>
+			new Promise<void>((resolve) => setTimeout(resolve, 10)),
+		unmount: resolveWith,
+		rerender: () => {},
+		cleanup: () => {},
+		clear: () => {},
+	};
+}
+
 function makeDefaultDeps(
 	overrides: Partial<QueryDeps> = {},
 ): QueryDeps & { capturedOptions: RunOptions | null } {
-	const capturedOptions: RunOptions | null = null;
-
 	const deps: QueryDeps & { capturedOptions: RunOptions | null } = {
-		capturedOptions,
+		capturedOptions: null,
 		runAgent: (options: RunOptions) => {
 			deps.capturedOptions = options;
 			return makeGenerator([makeResultEvent()]);
@@ -42,6 +57,7 @@ function makeDefaultDeps(
 		stdout: { write: vi.fn<(data: string) => boolean>().mockReturnValue(true) },
 		readFile: (path: string) => `content of ${path}`,
 		exit: vi.fn<(code: number) => void>(),
+		render: vi.fn().mockImplementation(() => makeFakeInkInstance(() => {})),
 		...overrides,
 	};
 
@@ -135,6 +151,21 @@ describe("executeQuery", () => {
 
 			expect(deps.capturedOptions?.request.files).toBeUndefined();
 		});
+
+		it("exits with code 1 and writes error when file read fails", async () => {
+			const deps = makeDefaultDeps({
+				readFile: () => {
+					throw new Error("ENOENT: no such file");
+				},
+			});
+			await executeQuery(makeDefaultArgs({ file: ["missing.txt"] }), deps);
+
+			expect(deps.exit).toHaveBeenCalledWith(1);
+			const writeMock = deps.stdout.write as ReturnType<typeof vi.fn>;
+			expect(writeMock).toHaveBeenCalledWith(
+				expect.stringContaining("Error reading file missing.txt"),
+			);
+		});
 	});
 
 	describe("--no-tui stdout output", () => {
@@ -180,6 +211,38 @@ describe("executeQuery", () => {
 			await executeQuery(makeDefaultArgs({ noTui: true }), deps);
 
 			expect(deps.exit).toHaveBeenCalledWith(1);
+		});
+	});
+
+	describe("TUI path", () => {
+		it("calls deps.render when noTui is false", async () => {
+			const deps = makeDefaultDeps({
+				runAgent: () => makeGenerator([makeResultEvent()]),
+			});
+			await executeQuery(makeDefaultArgs({ noTui: false }), deps);
+
+			expect(deps.render).toHaveBeenCalledTimes(1);
+		});
+
+		it("calls deps.render with an element and waits for exit", async () => {
+			let waitUntilExitCalled = false;
+			const deps = makeDefaultDeps({
+				runAgent: () => makeGenerator([makeResultEvent()]),
+				render: vi.fn().mockImplementation(() => ({
+					waitUntilExit: () =>
+						new Promise<void>((resolve) => {
+							waitUntilExitCalled = true;
+							resolve();
+						}),
+					unmount: () => {},
+					rerender: () => {},
+					cleanup: () => {},
+					clear: () => {},
+				})),
+			});
+			await executeQuery(makeDefaultArgs({ noTui: false }), deps);
+
+			expect(waitUntilExitCalled).toBe(true);
 		});
 	});
 });

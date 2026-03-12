@@ -174,14 +174,17 @@ describe("reduceAgentState", () => {
 			expect(state.currentTurn).toEqual([]);
 		});
 
-		it("does not push empty currentTurn to completedTurns on result when turn is empty", () => {
+		it("result event after a completed turn creates a second turn containing the result", () => {
 			const state = applyEvents([
 				{ type: "assistant", subtype: "delta", content: "turn 1" },
 				{ type: "assistant", subtype: "complete", content: "turn 1" },
 				{ type: "result", content: "done" },
 			]);
-			// Only the first turn should be in completedTurns, result event alone doesn't add empty turn
+			// Turn 1 from assistant complete, turn 2 containing just the result event
 			expect(state.completedTurns).toHaveLength(2);
+			expect(state.completedTurns[1]).toEqual([
+				{ type: "result", content: "done" },
+			]);
 		});
 	});
 

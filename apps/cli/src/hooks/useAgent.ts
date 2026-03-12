@@ -125,8 +125,13 @@ export function useAgent(
 					if (cancelled) break;
 					dispatch(event);
 				}
-			} catch {
-				// Iteration aborted or failed — ignore
+			} catch (err) {
+				if (!cancelled) {
+					dispatch({
+						type: "error",
+						content: err instanceof Error ? err.message : "Stream error",
+					});
+				}
 			}
 		}
 

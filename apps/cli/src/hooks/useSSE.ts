@@ -61,11 +61,15 @@ export function useSSE(
 	const files = options?.files ?? null;
 	const provider = options?.provider ?? null;
 
+	// Stable ref for createClient so it doesn't trigger re-memoization
+	const createClientRef = useRef(createClient);
+	createClientRef.current = createClient;
+
 	// Memoize client on baseUrl + apiKey only
 	const client = useMemo<SandcasterClientLike | null>(() => {
 		if (baseUrl === null) return null;
-		return createClient({ baseUrl, apiKey: apiKey ?? undefined });
-	}, [baseUrl, apiKey, createClient]);
+		return createClientRef.current({ baseUrl, apiKey: apiKey ?? undefined });
+	}, [baseUrl, apiKey]);
 
 	// Track current client in a ref so the cleanup effect always has the latest
 	const clientRef = useRef<SandcasterClientLike | null>(null);

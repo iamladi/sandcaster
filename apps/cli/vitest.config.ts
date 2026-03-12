@@ -4,5 +4,6 @@ export default defineConfig({
 	test: {
 		name: "cli",
 		passWithNoTests: true,
+		exclude: ["**/dist/**", "**/node_modules/**"],
 	},
 });
