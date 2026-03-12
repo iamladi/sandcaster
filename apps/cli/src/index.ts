@@ -44,9 +44,16 @@ const main = defineCommand({
 	},
 });
 
-// If first positional arg isn't a known subcommand, treat as query shorthand
+// If first arg is -T/--template, treat as query shorthand (inject "query" before it).
+// Otherwise, if it's not a known subcommand and doesn't start with -, treat as query prompt.
 const firstArg = process.argv[2];
-if (firstArg && !knownSubcommands.has(firstArg) && !firstArg.startsWith("-")) {
+if (firstArg === "-T" || firstArg === "--template") {
+	process.argv.splice(2, 0, "query");
+} else if (
+	firstArg &&
+	!knownSubcommands.has(firstArg) &&
+	!firstArg.startsWith("-")
+) {
 	process.argv.splice(2, 0, "query");
 }
 
