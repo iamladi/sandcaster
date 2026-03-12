@@ -231,7 +231,7 @@ describe("createExtractionMarker", () => {
 describe("extractGeneratedFiles", () => {
 	it("finds and returns new files as file events", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-1.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		const commandResults = new Map([
 			[findCmd, { stdout: "output.txt\t12\n", stderr: "", exitCode: 0 }],
@@ -257,7 +257,7 @@ describe("extractGeneratedFiles", () => {
 
 	it("filters out input files from results", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-2.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		const commandResults = new Map([
 			[
@@ -288,7 +288,7 @@ describe("extractGeneratedFiles", () => {
 
 	it("caps results at 10 files maximum", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-3.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		// Generate 15 files in the find output
 		const lines = Array.from(
@@ -319,7 +319,7 @@ describe("extractGeneratedFiles", () => {
 
 	it("filters out files over 25MB", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-4.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		const oversizeBytes = 26 * 1024 * 1024; // 26MB > 25MB limit
 		const commandResults = new Map([
@@ -351,7 +351,7 @@ describe("extractGeneratedFiles", () => {
 
 	it("cleans up marker file in finally block", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-5.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		const commandResults = new Map([
 			[findCmd, { stdout: "", stderr: "", exitCode: 0 }],
@@ -366,7 +366,7 @@ describe("extractGeneratedFiles", () => {
 		);
 
 		const cleanupCall = sbx.commands.calls.find((c) =>
-			c.cmd.includes(`rm -f ${markerPath}`),
+			c.cmd.includes(`rm -f '${markerPath}'`),
 		);
 		expect(cleanupCall).toBeDefined();
 	});
@@ -375,7 +375,7 @@ describe("extractGeneratedFiles", () => {
 		const markerPath = "/tmp/sandcaster-extract-test-6.marker";
 		// No matching command result — but we simulate an error by using a
 		// sandbox whose read throws for all paths
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 		const commandResults = new Map([
 			[findCmd, { stdout: "some-file.txt\t10\n", stderr: "", exitCode: 0 }],
 		]);
@@ -400,14 +400,14 @@ describe("extractGeneratedFiles", () => {
 		).rejects.toThrow("read failed");
 
 		const cleanupCall = sbx.commands.calls.find((c) =>
-			c.cmd.includes(`rm -f ${markerPath}`),
+			c.cmd.includes(`rm -f '${markerPath}'`),
 		);
 		expect(cleanupCall).toBeDefined();
 	});
 
 	it("returns empty array when no new files are found", async () => {
 		const markerPath = "/tmp/sandcaster-extract-test-7.marker";
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer '${markerPath}' -printf '%P\\t%s\\n'`;
 
 		const commandResults = new Map([
 			[findCmd, { stdout: "", stderr: "", exitCode: 0 }],

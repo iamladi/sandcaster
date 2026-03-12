@@ -16,6 +16,13 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB
 // ---------------------------------------------------------------------------
 
 /**
+ * Shell-quote a string by wrapping in single quotes, escaping embedded quotes.
+ */
+function shellQuote(s: string): string {
+	return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/**
  * Validate that a relative path contains no traversal or absolute references.
  * Returns the normalized POSIX path, or throws on violation.
  */
@@ -78,9 +85,9 @@ export async function uploadFiles(
 		}
 	}
 
-	// Run mkdir -p for all needed directories in one command
+	// Run mkdir -p for all needed directories in one command (shell-quoted)
 	if (dirs.size > 0) {
-		const dirList = Array.from(dirs).join(" ");
+		const dirList = Array.from(dirs).map(shellQuote).join(" ");
 		await sbx.commands.run(`mkdir -p ${dirList}`);
 	}
 
@@ -105,8 +112,10 @@ export async function uploadSkills(
 ): Promise<void> {
 	if (skills.length === 0) return;
 
-	// Create all skill directories
-	const dirs = skills.map((s) => `${SKILLS_BASE}/${s.name}`).join(" ");
+	// Create all skill directories (shell-quoted)
+	const dirs = skills
+		.map((s) => shellQuote(`${SKILLS_BASE}/${s.name}`))
+		.join(" ");
 	await sbx.commands.run(`mkdir -p ${dirs}`);
 
 	// Write all SKILL.md files
@@ -130,7 +139,7 @@ export async function createExtractionMarker(
 	requestId: string,
 ): Promise<string> {
 	const markerPath = `/tmp/sandcaster-extract-${requestId}.marker`;
-	await sbx.commands.run(`touch ${markerPath}`);
+	await sbx.commands.run(`touch ${shellQuote(markerPath)}`);
 	return markerPath;
 }
 
@@ -149,7 +158,7 @@ export async function extractGeneratedFiles(
 ): Promise<Array<{ type: "file"; path: string; content: string }>> {
 	try {
 		// Find files newer than the marker, excluding dotfiles
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${markerPath} -printf '%P\\t%s\\n'`;
+		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${shellQuote(markerPath)} -printf '%P\\t%s\\n'`;
 		const { stdout } = await sbx.commands.run(findCmd);
 
 		// Parse the find output into (relativePath, sizeBytes) pairs
@@ -164,6 +173,9 @@ export async function extractGeneratedFiles(
 
 			const relativePath = trimmed.slice(0, tab);
 			const size = Number(trimmed.slice(tab + 1));
+
+			// Filter: skip malformed size
+			if (!Number.isFinite(size)) continue;
 
 			// Filter: skip input files
 			if (inputFileNames.has(relativePath)) continue;
@@ -206,6 +218,6 @@ export async function extractGeneratedFiles(
 		return results;
 	} finally {
 		// Always clean up the marker file
-		await sbx.commands.run(`rm -f ${markerPath}`);
+		await sbx.commands.run(`rm -f ${shellQuote(markerPath)}`);
 	}
 }

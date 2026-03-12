@@ -20,7 +20,7 @@ import {
 	resolveModelFromConfig,
 } from "../../runner/model-aliases.js";
 
-const mockGetModel = getModel as MockInstance;
+const mockGetModel = getModel as unknown as MockInstance;
 
 function fakeModel(provider: string, modelId: string): Model<string> {
 	return {

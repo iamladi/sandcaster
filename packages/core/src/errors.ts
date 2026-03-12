@@ -21,10 +21,3 @@ export class ValidationError extends SandcasterError {
 		this.name = "ValidationError";
 	}
 }
-
-export class SandboxError extends SandcasterError {
-	constructor(message: string) {
-		super(message, "SANDBOX_ERROR");
-		this.name = "SandboxError";
-	}
-}
