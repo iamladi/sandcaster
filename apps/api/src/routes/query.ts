@@ -86,7 +86,7 @@ export function registerQueryRoutes(
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 
-					opts.runStore?.fail(requestId, message);
+					opts.runStore?.fail(requestId, message, durationSecs);
 
 					await stream.writeSSE({
 						event: "error",

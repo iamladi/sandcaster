@@ -13,8 +13,21 @@ async function* fakeRunAgent(
 		content: "Done",
 		costUsd: 0.01,
 		numTurns: 1,
+		durationSecs: 42,
 		model: "claude-sonnet-4-20250514",
 	};
+}
+
+async function* errorRunAgentWithResult(
+	_options: RunOptions,
+): AsyncGenerator<SandcasterEvent> {
+	yield { type: "system", content: "Starting" };
+	yield {
+		type: "result",
+		content: "partial",
+		durationSecs: 5,
+	};
+	throw new Error("Sandbox crashed");
 }
 
 async function* errorRunAgent(
@@ -104,6 +117,35 @@ describe("POST /query", () => {
 		expect(runs).toHaveLength(1);
 		expect(runs[0].status).toBe("error");
 		expect(runs[0].error).toContain("Sandbox crashed");
+	});
+
+	test("passes durationSecs to runStore.fail when agent throws after result event", async () => {
+		const runStore = createRunStore({
+			path: `/tmp/sandcaster-test-${crypto.randomUUID()}.jsonl`,
+		});
+		const app = createApp({
+			runAgent: errorRunAgentWithResult,
+			runStore,
+		});
+		const res = await postQuery(app, { prompt: "hello" });
+		await res.text();
+
+		const runs = runStore.list();
+		expect(runs).toHaveLength(1);
+		expect(runs[0].status).toBe("error");
+		expect(runs[0].durationSecs).toBe(5);
+	});
+
+	test("stores durationSecs on completed runs", async () => {
+		const runStore = createRunStore({
+			path: `/tmp/sandcaster-test-${crypto.randomUUID()}.jsonl`,
+		});
+		const app = createApp({ runAgent: fakeRunAgent, runStore });
+		const res = await postQuery(app, { prompt: "hello" });
+		await res.text();
+
+		const runs = runStore.list();
+		expect(runs[0].durationSecs).toBe(42);
 	});
 
 	test("requires auth when apiKey is set", async () => {
