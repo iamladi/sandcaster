@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { defineCommand, runMain } from "citty";
+import { initCommand } from "./commands/init.js";
 import type { QueryArgs } from "./commands/query.js";
 import { queryCommand } from "./commands/query.js";
 import { serveCommand } from "./commands/serve.js";
+import { webhookCommand } from "./commands/webhook.js";
 
 export const defaultQueryArgs: Omit<QueryArgs, "prompt"> = {
 	file: [],
@@ -21,21 +23,8 @@ const main = defineCommand({
 	subCommands: {
 		query: queryCommand,
 		serve: serveCommand,
-		init: defineCommand({
-			meta: {
-				name: "init",
-				description: "Initialize a sandcaster.json config file",
-			},
-			run() {
-				console.log("init not yet implemented");
-			},
-		}),
-		webhook: defineCommand({
-			meta: { name: "webhook", description: "Manage webhooks" },
-			run() {
-				console.log("webhook not yet implemented");
-			},
-		}),
+		init: initCommand,
+		webhook: webhookCommand,
 	},
 	args: {
 		prompt: {
