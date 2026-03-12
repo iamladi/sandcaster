@@ -17,7 +17,9 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@sandcaster/core": "workspace:*"
+		"@hono/node-server": "^1.19.11",
+		"@sandcaster/core": "workspace:*",
+		"hono": "^4.12.7"
 	},
 	"devDependencies": {
 		"@sandcaster/ts-config": "workspace:*"
