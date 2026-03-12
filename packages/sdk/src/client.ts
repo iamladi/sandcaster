@@ -108,8 +108,13 @@ export class SandcasterClient {
 					): Promise<IteratorResult<SandcasterEvent>> {
 						self.#activeControllers.delete(controller);
 						if (generatorPromise) {
-							const gen = await generatorPromise;
-							await gen.return(value);
+							try {
+								const gen = await generatorPromise;
+								await gen.return(value);
+							} catch {
+								// generatorPromise may have rejected (e.g. fetch failure) —
+								// return() must always succeed cleanly
+							}
 						}
 						return { done: true, value: undefined };
 					},

@@ -307,6 +307,23 @@ describe("SandcasterClient", () => {
 		});
 	});
 
+	describe("iterator return()", () => {
+		it("does not throw when generatorPromise rejects", async () => {
+			fetchMock.mockRejectedValue(new Error("network failure"));
+
+			const client = new SandcasterClient({ baseUrl: "http://localhost:3000" });
+			const iterable = client.query({ prompt: "test" });
+			const iterator = iterable[Symbol.asyncIterator]();
+
+			// Trigger the generator promise by calling next() — it will reject
+			await expect(iterator.next()).rejects.toThrow("network failure");
+
+			// return() should NOT throw even though generatorPromise rejected
+			const result = await iterator.return();
+			expect(result).toEqual({ done: true, value: undefined });
+		});
+	});
+
 	describe("dispose (Symbol.asyncDispose)", () => {
 		it("aborts in-flight query() streams on dispose", async () => {
 			// Use a stream that never ends — we dispose before it finishes
