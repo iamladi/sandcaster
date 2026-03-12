@@ -123,12 +123,12 @@ export async function executeQuery(
 	}
 
 	// Only set request.timeout when the user explicitly passed --timeout.
-	// When not provided: let template config or local config handle it.
+	// When not provided: let config (template or local) handle it.
 	// Fall back to 300 only when no source provides a timeout.
 	const effectiveTimeout =
 		args.timeout !== undefined
 			? args.timeout
-			: config?.timeout !== undefined || args.template !== undefined
+			: config?.timeout !== undefined
 				? undefined
 				: 300;
 
