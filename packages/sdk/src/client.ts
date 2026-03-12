@@ -58,53 +58,58 @@ export class SandcasterClient {
 					}
 				}
 
-				let generator: AsyncGenerator<SandcasterEvent> | null = null;
-				let started = false;
+				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
+					null;
 
-				const getGenerator = async (): Promise<
+				const ensureGenerator = (): Promise<
 					AsyncGenerator<SandcasterEvent>
 				> => {
-					const response = await fetch(`${self.#baseUrl}/query`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...self.#authHeaders(),
-						},
-						body: JSON.stringify(request),
-						signal: controller.signal,
-					});
+					if (!generatorPromise) {
+						generatorPromise = (async () => {
+							const response = await fetch(`${self.#baseUrl}/query`, {
+								method: "POST",
+								headers: {
+									"Content-Type": "application/json",
+									...self.#authHeaders(),
+								},
+								body: JSON.stringify(request),
+								signal: controller.signal,
+							});
 
-					if (!response.ok) {
-						throw new Error(`${response.status} ${response.statusText}`);
+							if (!response.ok) {
+								throw new Error(`${response.status} ${response.statusText}`);
+							}
+
+							return parseSSEStream(
+								response.body as ReadableStream<Uint8Array>,
+								controller.signal,
+							);
+						})();
 					}
-
-					return parseSSEStream(
-						response.body as ReadableStream<Uint8Array>,
-						controller.signal,
-					);
+					return generatorPromise;
 				};
 
 				return {
 					async next(): Promise<IteratorResult<SandcasterEvent>> {
-						if (!started) {
-							started = true;
-							generator = await getGenerator();
-						}
-
-						// generator is guaranteed non-null after getGenerator()
-						const gen = generator as AsyncGenerator<SandcasterEvent>;
-						const result = await gen.next();
-						if (result.done) {
+						try {
+							const gen = await ensureGenerator();
+							const result = await gen.next();
+							if (result.done) {
+								self.#activeControllers.delete(controller);
+							}
+							return result;
+						} catch (error) {
 							self.#activeControllers.delete(controller);
+							throw error;
 						}
-						return result;
 					},
 					async return(
 						value?: unknown,
 					): Promise<IteratorResult<SandcasterEvent>> {
 						self.#activeControllers.delete(controller);
-						if (generator) {
-							await generator.return(value);
+						if (generatorPromise) {
+							const gen = await generatorPromise;
+							await gen.return(value);
 						}
 						return { done: true, value: undefined };
 					},
@@ -112,8 +117,9 @@ export class SandcasterClient {
 						error?: unknown,
 					): Promise<IteratorResult<SandcasterEvent>> {
 						self.#activeControllers.delete(controller);
-						if (generator) {
-							return generator.throw(error);
+						if (generatorPromise) {
+							const gen = await generatorPromise;
+							return gen.throw(error);
 						}
 						throw error;
 					},
