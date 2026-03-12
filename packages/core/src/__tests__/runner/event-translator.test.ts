@@ -192,6 +192,24 @@ describe("createEventTranslator", () => {
 			expect((events[0] as { numTurns: number }).numTurns).toBe(3);
 		});
 
+		it("emits error event when last assistant message has stopReason error", () => {
+			const translator = createEventTranslator();
+			const errorAssistant = makeAssistantMessage({
+				stopReason: "error",
+				errorMessage: "401 authentication_error: invalid x-api-key",
+			});
+			const events = translator.translate({
+				type: "agent_end",
+				messages: [errorAssistant],
+			});
+
+			expect(events).toHaveLength(1);
+			expect(events[0].type).toBe("error");
+			expect((events[0] as { content: string }).content).toContain(
+				"authentication_error",
+			);
+		});
+
 		it("emits result without usage info when messages is empty", () => {
 			const translator = createEventTranslator();
 			const events = translator.translate({
@@ -395,6 +413,47 @@ describe("createEventTranslator", () => {
 					error: errorMessage,
 				}),
 			);
+
+			expect(events).toHaveLength(1);
+			expect(events[0].type).toBe("error");
+		});
+	});
+
+	describe("message_end with error stopReason", () => {
+		it("emits an error event when message_end has stopReason error", () => {
+			const translator = createEventTranslator();
+			const errorMsg = makeAssistantMessage({
+				stopReason: "error",
+				errorMessage: "401 authentication_error: invalid x-api-key",
+			});
+			const events = translator.translate({
+				type: "message_end",
+				message: errorMsg,
+			});
+
+			expect(events).toHaveLength(1);
+			expect(events[0].type).toBe("error");
+			expect((events[0] as { content: string }).content).toContain(
+				"authentication_error",
+			);
+		});
+
+		it("does not emit error for normal message_end", () => {
+			const translator = createEventTranslator();
+			const events = translator.translate({
+				type: "message_end",
+				message: makeAssistantMessage({ stopReason: "stop" }),
+			});
+
+			expect(events).toHaveLength(0);
+		});
+
+		it("emits generic error when errorMessage is missing", () => {
+			const translator = createEventTranslator();
+			const events = translator.translate({
+				type: "message_end",
+				message: makeAssistantMessage({ stopReason: "error" }),
+			});
 
 			expect(events).toHaveLength(1);
 			expect(events[0].type).toBe("error");

@@ -60,6 +60,14 @@ export function createEventTranslator(): {
 				}
 
 				const last = assistantMessages[assistantMessages.length - 1];
+
+				if (last.stopReason === "error") {
+					const content =
+						(last as AssistantMessage & { errorMessage?: string })
+							.errorMessage ?? "LLM request failed";
+					return [{ type: "error", content }];
+				}
+
 				const costUsd = last.usage?.cost?.total;
 				const model = last.model;
 				const numTurns = assistantMessages.length;
@@ -142,7 +150,20 @@ export function createEventTranslator(): {
 				];
 			}
 
-			// Ignored: turn_start, turn_end, message_start, message_end,
+			case "message_end": {
+				// Surface LLM errors (e.g. auth failures) that arrive as
+				// stopReason: "error" on message_end without a message_update
+				const msg = event.message as AssistantMessage;
+				if (msg.stopReason === "error") {
+					const content =
+						(msg as AssistantMessage & { errorMessage?: string })
+							.errorMessage ?? "LLM request failed";
+					return [{ type: "error", content }];
+				}
+				return [];
+			}
+
+			// Ignored: turn_start, turn_end, message_start,
 			// tool_execution_update
 			default: {
 				return [];
