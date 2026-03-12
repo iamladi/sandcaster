@@ -30,6 +30,7 @@ function padRight(str: string, width: number): string {
 }
 
 function formatList(starters: StarterDefinition[]): string {
+	if (starters.length === 0) return "No templates available.\n";
 	const slugWidth = Math.max(...starters.map((s) => s.slug.length)) + 4;
 	const lines: string[] = [];
 
@@ -61,9 +62,13 @@ function formatDetail(s: StarterDefinition): string {
 		lines.push(`  Max turns:   ${cfg.maxTurns}`);
 	}
 
-	const outputFormat = cfg.outputFormat as
-		| { type?: string; schema?: { properties?: Record<string, unknown> } }
-		| undefined;
+	const outputFormat =
+		typeof cfg.outputFormat === "object" && cfg.outputFormat !== null
+			? (cfg.outputFormat as {
+					type?: string;
+					schema?: { properties?: Record<string, unknown> };
+				})
+			: undefined;
 	if (outputFormat !== undefined) {
 		const schemaProps = outputFormat.schema?.properties;
 		const propNames = schemaProps ? Object.keys(schemaProps) : [];
@@ -76,7 +81,9 @@ function formatDetail(s: StarterDefinition): string {
 		}
 	}
 
-	const allowedTools = cfg.allowedTools as string[] | undefined;
+	const allowedTools = Array.isArray(cfg.allowedTools)
+		? (cfg.allowedTools as string[])
+		: undefined;
 	if (allowedTools !== undefined && allowedTools.length > 0) {
 		lines.push(`  Tools:       ${allowedTools.join(", ")}`);
 	}
@@ -85,7 +92,12 @@ function formatDetail(s: StarterDefinition): string {
 		lines.push(`  Aliases:     ${s.aliases.join(", ")}`);
 	}
 
-	const agents = cfg.agents as Record<string, unknown> | undefined;
+	const agents =
+		typeof cfg.agents === "object" &&
+		cfg.agents !== null &&
+		!Array.isArray(cfg.agents)
+			? (cfg.agents as Record<string, unknown>)
+			: undefined;
 	if (agents !== undefined) {
 		const agentNames = Object.keys(agents);
 		if (agentNames.length > 0) {
@@ -122,7 +134,7 @@ export function executeTemplates(
 		}
 
 		if (args.json) {
-			deps.stdout.write(JSON.stringify(starter.configJson, null, 2));
+			deps.stdout.write(`${JSON.stringify(starter.configJson, null, 2)}\n`);
 		} else {
 			deps.stdout.write(formatDetail(starter));
 		}
@@ -138,7 +150,7 @@ export function executeTemplates(
 				aliases: s.aliases,
 				configJson: s.configJson,
 			}));
-			deps.stdout.write(JSON.stringify(output, null, 2));
+			deps.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 		} else {
 			deps.stdout.write(formatList(starters));
 		}
@@ -149,7 +161,7 @@ export function executeTemplates(
 // Production deps
 // ---------------------------------------------------------------------------
 
-export const prodDeps: TemplatesDeps = {
+const prodDeps: TemplatesDeps = {
 	listStarters: catalogListStarters,
 	resolveStarter: catalogResolveStarter,
 	stdout: process.stdout,
