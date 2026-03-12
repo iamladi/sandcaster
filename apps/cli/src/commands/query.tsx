@@ -52,7 +52,7 @@ export interface QueryDeps {
  * Returns the directory name (e.g., "owasp-top-10").
  */
 function extractSkillName(path: string): string | null {
-	const match = /\.claude\/skills\/([^/]+)\/SKILL\.md$/.exec(path);
+	const match = /\.claude\/skills\/([a-zA-Z0-9_-]+)\/SKILL\.md$/.exec(path);
 	return match ? match[1] : null;
 }
 
@@ -122,13 +122,15 @@ export async function executeQuery(
 		}
 	}
 
-	// When timeout is not explicitly provided and no template, fall back to 300
+	// Only set request.timeout when the user explicitly passed --timeout.
+	// When not provided: let template config or local config handle it.
+	// Fall back to 300 only when no source provides a timeout.
 	const effectiveTimeout =
 		args.timeout !== undefined
 			? args.timeout
-			: args.template === undefined
-				? 300
-				: undefined;
+			: config?.timeout !== undefined || args.template !== undefined
+				? undefined
+				: 300;
 
 	const request = {
 		prompt: args.prompt,

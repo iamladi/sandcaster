@@ -347,11 +347,11 @@ describe("executeQuery", () => {
 			expect(loadConfigMock).not.toHaveBeenCalled();
 		});
 
-		it("prints error and exits 1 when template is unknown", async () => {
+		it("prints error and exits 1 when template is unknown, listing available choices", async () => {
 			const deps = makeDefaultDeps({
 				resolveStarter: (name: string) => {
 					throw new Error(
-						`Unknown starter "${name}". Choose one of: research-brief`,
+						`Unknown starter "${name}". Choose one of: research-brief, general-assistant`,
 					);
 				},
 			});
@@ -362,6 +362,9 @@ describe("executeQuery", () => {
 			const writeMock = deps.stdout.write as ReturnType<typeof vi.fn>;
 			expect(writeMock).toHaveBeenCalledWith(
 				expect.stringContaining("nonexistent"),
+			);
+			expect(writeMock).toHaveBeenCalledWith(
+				expect.stringContaining("research-brief"),
 			);
 		});
 
@@ -448,6 +451,49 @@ describe("executeQuery", () => {
 			await executeQuery(makeDefaultArgs({ timeout: undefined }), deps);
 
 			expect(deps.capturedOptions?.request.timeout).toBe(300);
+		});
+
+		it("does not override config timeout with 300 fallback", async () => {
+			const deps = makeDefaultDeps({
+				loadConfig: () => ({ timeout: 600 }),
+			});
+
+			await executeQuery(makeDefaultArgs({ timeout: undefined }), deps);
+
+			expect(deps.capturedOptions?.request.timeout).toBeUndefined();
+			expect(deps.capturedOptions?.config).toMatchObject({ timeout: 600 });
+		});
+
+		it("uses explicit --provider over template provider", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({
+					template: "research-brief",
+					provider: "openrouter",
+				}),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.provider).toBe("openrouter");
+		});
+
+		it("uses explicit --maxTurns over template maxTurns", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({
+					template: "research-brief",
+					maxTurns: 5,
+				}),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.maxTurns).toBe(5);
 		});
 	});
 });
