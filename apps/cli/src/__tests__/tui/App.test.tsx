@@ -8,6 +8,7 @@ vi.mock("ink", async (importOriginal) => {
 	return {
 		...actual,
 		useStdout: () => ({ stdout: { columns: 80, rows: 24 } }),
+		useApp: () => ({ exit: vi.fn() }),
 	};
 });
 
