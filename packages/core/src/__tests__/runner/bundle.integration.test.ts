@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const CORE_ROOT = resolve(import.meta.dirname, "..", "..", "..");
-const BUNDLE_PATH = resolve(CORE_ROOT, "src", "runner", "dist", "runner.mjs");
+const BUNDLE_PATH = resolve(CORE_ROOT, "dist", "runner", "runner.mjs");
 const VITE_CONFIG = resolve(CORE_ROOT, "vite.config.runner.ts");
 
 describe("runner bundle", () => {

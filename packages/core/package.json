@@ -13,6 +13,7 @@
 	},
 	"scripts": {
 		"build": "tsc && bunx vite build --config vite.config.runner.ts",
+		"check-types": "tsc --noEmit",
 		"lint": "biome check .",
 		"test": "vitest run"
 	},

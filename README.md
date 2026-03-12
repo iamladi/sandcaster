@@ -6,7 +6,7 @@ CLI, API, TypeScript SDK, and Slack with streaming, file uploads, and config-dri
 
 Built on [Pi-mono](https://github.com/nicholasgriffintn/pi-mono) and [E2B](https://e2b.dev).
 
-<!-- [![CI](https://github.com/user/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/user/sandcaster/actions/workflows/ci.yml) -->
+[![CI](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue.svg)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.2+-f472b6.svg)](https://bun.sh/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

@@ -2,5 +2,9 @@
 	"name": "@sandcaster/ts-config",
 	"version": "0.0.0",
 	"private": true,
-	"files": ["base.json", "node.json", "react.json"]
+	"files": [
+		"base.json",
+		"node.json",
+		"react.json"
+	]
 }
