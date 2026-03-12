@@ -265,12 +265,57 @@ describe("SandcasterEventSchema", () => {
 		if (result.success) expect(result.data.type).toBe("system");
 	});
 
+	it("parses a system event with subtype", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "system",
+			subtype: "init",
+			content: "Agent started",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "system") {
+			expect(result.data.subtype).toBe("init");
+		}
+	});
+
 	it("parses an assistant event", () => {
 		const result = SandcasterEventSchema.safeParse({
 			type: "assistant",
 			content: "Hello!",
 		});
 		expect(result.success).toBe(true);
+	});
+
+	it("parses an assistant delta event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "assistant",
+			subtype: "delta",
+			content: "Hel",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "assistant") {
+			expect(result.data.subtype).toBe("delta");
+		}
+	});
+
+	it("parses an assistant complete event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "assistant",
+			subtype: "complete",
+			content: "Hello world!",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a tool_use event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.toolName).toBe("bash");
+		}
 	});
 
 	it("parses a tool_result event", () => {
@@ -285,10 +330,32 @@ describe("SandcasterEventSchema", () => {
 		}
 	});
 
+	it("parses a tool_result event with isError", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "command not found",
+			toolName: "bash",
+			isError: true,
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.isError).toBe(true);
+		}
+	});
+
 	it("parses a thinking event", () => {
 		const result = SandcasterEventSchema.safeParse({
 			type: "thinking",
 			content: "Reasoning...",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a thinking delta event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "thinking",
+			subtype: "delta",
+			content: "Let me think...",
 		});
 		expect(result.success).toBe(true);
 	});
@@ -305,6 +372,7 @@ describe("SandcasterEventSchema", () => {
 	it("parses a result event with all optional fields", () => {
 		const result = SandcasterEventSchema.safeParse({
 			type: "result",
+			subtype: "success",
 			content: "done",
 			costUsd: 0.05,
 			numTurns: 3,
@@ -315,6 +383,7 @@ describe("SandcasterEventSchema", () => {
 		if (result.success && result.data.type === "result") {
 			expect(result.data.costUsd).toBe(0.05);
 			expect(result.data.numTurns).toBe(3);
+			expect(result.data.subtype).toBe("success");
 		}
 	});
 

@@ -62,8 +62,6 @@ function normalizePosixPath(rawPath: string): string | null {
 // Files field refinement + transform
 // ---------------------------------------------------------------------------
 
-const textEncoder = new TextEncoder();
-
 const filesSchema = z
 	.record(z.string(), z.string())
 	.superRefine((v, ctx) => {
@@ -103,7 +101,7 @@ const filesSchema = z
 
 		let totalSize = 0;
 		for (const content of Object.values(v)) {
-			totalSize += textEncoder.encode(content).byteLength;
+			totalSize += Buffer.byteLength(content, "utf8");
 		}
 		if (totalSize > 10_000_000) {
 			ctx.addIssue({
@@ -196,14 +194,32 @@ export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;
 // ---------------------------------------------------------------------------
 
 export const SandcasterEventSchema = z.discriminatedUnion("type", [
-	z.object({ type: z.literal("system"), content: z.string() }),
-	z.object({ type: z.literal("assistant"), content: z.string() }),
+	z.object({
+		type: z.literal("system"),
+		subtype: z.string().optional(),
+		content: z.string(),
+	}),
+	z.object({
+		type: z.literal("assistant"),
+		subtype: z.enum(["delta", "complete"]).optional(),
+		content: z.string(),
+	}),
+	z.object({
+		type: z.literal("tool_use"),
+		toolName: z.string(),
+		content: z.string(),
+	}),
 	z.object({
 		type: z.literal("tool_result"),
 		content: z.string(),
 		toolName: z.string(),
+		isError: z.boolean().optional(),
 	}),
-	z.object({ type: z.literal("thinking"), content: z.string() }),
+	z.object({
+		type: z.literal("thinking"),
+		subtype: z.enum(["delta", "complete"]).optional(),
+		content: z.string(),
+	}),
 	z.object({
 		type: z.literal("file"),
 		path: z.string(),
@@ -211,6 +227,7 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("result"),
+		subtype: z.string().optional(),
 		content: z.string(),
 		costUsd: z.number().optional(),
 		numTurns: z.number().optional(),
