@@ -91,7 +91,9 @@ export class SandcasterClient {
 							generator = await getGenerator();
 						}
 
-						const result = await generator?.next();
+						// generator is guaranteed non-null after getGenerator()
+						const gen = generator as AsyncGenerator<SandcasterEvent>;
+						const result = await gen.next();
 						if (result.done) {
 							self.#activeControllers.delete(controller);
 						}
