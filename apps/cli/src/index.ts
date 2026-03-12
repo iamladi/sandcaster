@@ -6,18 +6,14 @@ import { queryCommand } from "./commands/query.js";
 import { serveCommand } from "./commands/serve.js";
 import { templatesCommand } from "./commands/templates.js";
 import { webhookCommand } from "./commands/webhook.js";
+import { parseEnvFile } from "./parse-env.js";
 
 // Load .env with override — the project .env is the source of truth for API keys.
 // Bun's built-in .env loading does NOT override existing env vars, which causes
 // stale shell vars to shadow the .env values.
 if (existsSync(".env")) {
-	for (const line of readFileSync(".env", "utf-8").split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-		const eqIdx = trimmed.indexOf("=");
-		if (eqIdx === -1) continue;
-		const key = trimmed.slice(0, eqIdx).trim();
-		const value = trimmed.slice(eqIdx + 1).trim();
+	const entries = parseEnvFile(readFileSync(".env", "utf-8"));
+	for (const [key, value] of Object.entries(entries)) {
 		process.env[key] = value;
 	}
 }
