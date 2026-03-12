@@ -25,16 +25,33 @@ export function createSandboxTools(options?: {
 			),
 		}),
 		execute: async (_toolCallId, params) => {
-			const stdout = execSync(params.command, {
-				cwd,
-				timeout: params.timeout ?? 30000,
-				encoding: "utf-8",
-				maxBuffer: 10 * 1024 * 1024,
-			});
-			return {
-				content: [{ type: "text" as const, text: stdout }],
-				details: { exitCode: 0 },
-			};
+			try {
+				const stdout = execSync(params.command, {
+					cwd,
+					timeout: params.timeout ?? 30000,
+					encoding: "utf-8",
+					maxBuffer: 10 * 1024 * 1024,
+				});
+				return {
+					content: [{ type: "text" as const, text: stdout }],
+					details: { exitCode: 0 },
+				};
+			} catch (err: unknown) {
+				const exitCode = (err as { status?: number }).status ?? 1;
+				const stderr = (err as { stderr?: string }).stderr ?? "";
+				const stdout = (err as { stdout?: string }).stdout ?? "";
+				const output = [stdout, stderr].filter(Boolean).join("\n");
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: output || String(err),
+						},
+					],
+					details: { exitCode },
+					isError: true,
+				};
+			}
 		},
 	};
 

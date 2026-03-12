@@ -88,13 +88,17 @@ describe("createSandboxTools", () => {
 			expect(result.details).toMatchObject({ exitCode: 0 });
 		});
 
-		it("throws when command fails", async () => {
+		it("returns structured error with exit code and stderr on non-zero exit", async () => {
 			const tools = createSandboxTools({ cwd: tmpDir });
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			await expect(
-				bash.execute("call-2", { command: "exit 1" }),
-			).rejects.toThrow();
+			const result = await bash.execute("call-2", {
+				command: "echo err >&2; exit 42",
+			});
+
+			expect(result.details.exitCode).toBe(42);
+			expect((result as any).isError).toBe(true);
+			expect((result.content[0] as any).text).toContain("err");
 		});
 
 		it("uses custom cwd when provided", async () => {
@@ -109,27 +113,28 @@ describe("createSandboxTools", () => {
 			});
 		});
 
-		it("throws when cwd does not exist", async () => {
-			// Verifies that the cwd option is actually forwarded to execSync.
-			// When the directory does not exist, execSync throws ENOENT.
+		it("returns error result when cwd does not exist", async () => {
 			const tools = createSandboxTools({
 				cwd: join(tmpDir, "nonexistent-cwd"),
 			});
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			await expect(
-				bash.execute("call-4", { command: "echo ok" }),
-			).rejects.toThrow();
+			const result = await bash.execute("call-4", { command: "echo ok" });
+
+			expect((result as any).isError).toBe(true);
+			expect((result.content[0] as any).text).toContain("ENOENT");
 		});
 
-		it("passes timeout parameter to execSync", async () => {
+		it("returns error result when command times out", async () => {
 			const tools = createSandboxTools({ cwd: tmpDir });
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			// A command with a very short timeout should throw
-			await expect(
-				bash.execute("call-5", { command: "sleep 10", timeout: 1 }),
-			).rejects.toThrow();
+			const result = await bash.execute("call-5", {
+				command: "sleep 10",
+				timeout: 1,
+			});
+
+			expect((result as any).isError).toBe(true);
 		});
 	});
 
