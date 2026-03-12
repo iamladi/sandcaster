@@ -1,12 +1,13 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const MIN_KEY_LENGTH = 32;
 
+const HMAC_KEY = "sandcaster-safe-compare";
+
 function safeCompare(a: string, b: string): boolean {
-	const aBuf = Buffer.from(a, "utf8");
-	const bBuf = Buffer.from(b, "utf8");
-	if (aBuf.length !== bBuf.length) return false;
-	return timingSafeEqual(aBuf, bBuf);
+	const aHash = createHmac("sha256", HMAC_KEY).update(a).digest();
+	const bHash = createHmac("sha256", HMAC_KEY).update(b).digest();
+	return timingSafeEqual(aHash, bHash);
 }
 
 export function validateBearerToken(token: string, keys: string[]): boolean {

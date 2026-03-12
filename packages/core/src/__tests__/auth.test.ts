@@ -35,6 +35,15 @@ describe("validateBearerToken", () => {
 		const shortToken = "a".repeat(16);
 		expect(validateBearerToken(shortToken, [validKey])).toBe(false);
 	});
+
+	it("returns false for different-length tokens without leaking length info (HMAC comparison)", () => {
+		// Ensure tokens of varying lengths all correctly reject
+		const lengths = [1, 16, 31, 33, 64, 128];
+		for (const len of lengths) {
+			const token = "x".repeat(len);
+			expect(validateBearerToken(token, [validKey])).toBe(false);
+		}
+	});
 });
 
 describe("validateKeyLength", () => {
