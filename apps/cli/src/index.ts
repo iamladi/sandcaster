@@ -2,6 +2,7 @@
 import { defineCommand, runMain } from "citty";
 import type { QueryArgs } from "./commands/query.js";
 import { queryCommand } from "./commands/query.js";
+import { serveCommand } from "./commands/serve.js";
 
 export const defaultQueryArgs: Omit<QueryArgs, "prompt"> = {
 	file: [],
@@ -19,13 +20,7 @@ const main = defineCommand({
 	},
 	subCommands: {
 		query: queryCommand,
-		// Stubs for future phases
-		serve: defineCommand({
-			meta: { name: "serve", description: "Start the Sandcaster API server" },
-			run() {
-				console.log("serve not yet implemented");
-			},
-		}),
+		serve: serveCommand,
 		init: defineCommand({
 			meta: {
 				name: "init",
