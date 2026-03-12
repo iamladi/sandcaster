@@ -18,5 +18,8 @@
 	},
 	"devDependencies": {
 		"@sandcaster/ts-config": "workspace:*"
+	},
+	"dependencies": {
+		"eventsource-parser": "^3.0.6"
 	}
 }
