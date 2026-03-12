@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { Sandbox } from "e2b";
+import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
@@ -16,26 +17,33 @@ import type {
 } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
-// Runner bundle — loaded once at module init
+// Runner bundle — lazy-loaded on first use so that importing this module
+// (e.g. for SandboxError) doesn't trigger a readFileSync side effect.
 // ---------------------------------------------------------------------------
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const RUNNER_BUNDLE = readFileSync(
-	resolve(__dirname, "runner/dist/runner.mjs"),
-	"utf-8",
-);
+let _runnerBundle: string | undefined;
+function _getRunnerBundle(): string {
+	if (_runnerBundle === undefined) {
+		_runnerBundle = readFileSync(
+			resolve(__dirname, "runner/dist/runner.mjs"),
+			"utf-8",
+		);
+	}
+	return _runnerBundle;
+}
 
 // ---------------------------------------------------------------------------
 // SandboxError
 // ---------------------------------------------------------------------------
 
-export class SandboxError extends Error {
+export class SandboxError extends SandcasterError {
 	constructor(
 		message: string,
 		public readonly stage: "create" | "upload" | "exec" | "cleanup",
 		public readonly cause?: unknown,
 	) {
-		super(message);
+		super(message, "SANDBOX_ERROR");
 		this.name = "SandboxError";
 	}
 }
@@ -101,13 +109,9 @@ function buildAgentConfig(
 	if (model !== undefined) agentConfig.model = model;
 	if (maxTurns !== undefined) agentConfig.max_turns = maxTurns;
 
-	// System prompt from config
+	// System prompt from config (can be a string or { preset, append? } object)
 	if (config?.systemPrompt !== undefined) {
-		if (typeof config.systemPrompt === "string") {
-			agentConfig.system_prompt = config.systemPrompt;
-		} else {
-			agentConfig.system_prompt = config.systemPrompt;
-		}
+		agentConfig.system_prompt = config.systemPrompt;
 	}
 	if (config?.systemPromptAppend !== undefined) {
 		agentConfig.system_prompt_append = config.systemPromptAppend;
@@ -143,8 +147,7 @@ export async function* runAgentInSandbox(
 	// ------------------------------------------------------------------
 	let sbx: Sandbox;
 	try {
-		sbx = await Sandbox.create({
-			template,
+		sbx = await Sandbox.create(template, {
 			apiKey,
 			timeoutMs,
 			envs: buildEnvs(request),
@@ -164,7 +167,7 @@ export async function* runAgentInSandbox(
 		// ------------------------------------------------------------------
 		// 2. Upload runner bundle
 		// ------------------------------------------------------------------
-		await sbx.files.write("/opt/runner.mjs", RUNNER_BUNDLE);
+		await sbx.files.write("/opt/runner.mjs", _getRunnerBundle());
 
 		// ------------------------------------------------------------------
 		// 3. Upload agent config
@@ -197,15 +200,21 @@ export async function* runAgentInSandbox(
 		// ------------------------------------------------------------------
 		// 6. Create extraction marker
 		// ------------------------------------------------------------------
-		const markerPath = await createExtractionMarker(sbx, requestId);
+		const markerPath = await createExtractionMarker(sbx, requestId ?? "");
 
 		// ------------------------------------------------------------------
 		// 7 & 8. Execute runner + stream events via PassThrough bridge
 		// ------------------------------------------------------------------
 		const stream = new PassThrough({ objectMode: true });
 
-		const onStdout = (data: { line: string }) => {
-			stream.push(data.line);
+		let stdoutBuffer = "";
+		const onStdout = (data: string) => {
+			stdoutBuffer += data;
+			const lines = stdoutBuffer.split("\n");
+			stdoutBuffer = lines.pop() ?? "";
+			for (const line of lines) {
+				if (line.trim()) stream.push(line);
+			}
 		};
 
 		// Run the command — when it resolves/rejects, we end the stream
@@ -213,11 +222,13 @@ export async function* runAgentInSandbox(
 			.run("node /opt/runner.mjs", {
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
-				onStderr: (_data: { line: string }) => {
+				onStderr: (_data: string) => {
 					// stderr is captured but not streamed as events here
 				},
 			})
 			.then(() => {
+				// Flush any remaining buffered content
+				if (stdoutBuffer.trim()) stream.push(stdoutBuffer);
 				stream.end();
 			})
 			.catch((err: unknown) => {

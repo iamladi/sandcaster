@@ -25,7 +25,9 @@ vi.mock("e2b", () => {
 vi.mock("../files.js", () => ({
 	uploadFiles: vi.fn().mockResolvedValue(undefined),
 	uploadSkills: vi.fn().mockResolvedValue(undefined),
-	createExtractionMarker: vi.fn().mockResolvedValue(undefined),
+	createExtractionMarker: vi
+		.fn()
+		.mockResolvedValue("/tmp/sandcaster-extract-test.marker"),
 	extractGeneratedFiles: vi.fn().mockResolvedValue([]),
 }));
 
@@ -87,13 +89,13 @@ function makeFakeSandbox(stdoutLines: string[] = []) {
 				async (
 					_cmd: string,
 					opts: {
-						onStdout?: (d: { line: string }) => void;
-						onStderr?: (d: { line: string }) => void;
+						onStdout?: (data: string) => void;
+						onStderr?: (data: string) => void;
 					},
 				) => {
-					// Simulate async delivery of stdout lines
+					// Simulate async delivery of stdout lines (with \n like real E2B)
 					for (const line of stdoutLines) {
-						opts?.onStdout?.({ line });
+						opts?.onStdout?.(`${line}\n`);
 					}
 					return { exitCode: 0 };
 				},
@@ -282,7 +284,7 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][0];
+		const callArgs = createMock.mock.calls[0][1];
 		// timeout is in seconds in the request, ms in E2B API
 		expect(callArgs.timeoutMs).toBe(600 * 1000);
 	});
@@ -297,7 +299,7 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][0];
+		const callArgs = createMock.mock.calls[0][1];
 		expect(callArgs.timeoutMs).toBe(300 * 1000);
 	});
 
@@ -313,7 +315,7 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][0];
+		const callArgs = createMock.mock.calls[0][1];
 		expect(callArgs.envs).toMatchObject({
 			ANTHROPIC_API_KEY: "sk-ant-test",
 			E2B_API_KEY: "e2b-test",
@@ -332,7 +334,7 @@ describe("runAgentInSandbox", () => {
 
 		const configWriteCall = sbx.files.write.mock.calls.find(
 			(call: string[]) => call[0] === "/opt/agent_config.json",
-		);
+		) as string[];
 		expect(configWriteCall).toBeDefined();
 
 		const writtenConfig = JSON.parse(configWriteCall[1]);
