@@ -6,6 +6,7 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import type { QueryArgs, QueryDeps } from "../../commands/query.js";
 import { executeQuery } from "../../commands/query.js";
+import type { StarterDefinition } from "../../starters/catalog.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,6 +59,9 @@ function makeDefaultDeps(
 		readFile: (path: string) => `content of ${path}`,
 		exit: vi.fn<(code: number) => void>(),
 		render: vi.fn().mockImplementation(() => makeFakeInkInstance(() => {})),
+		resolveStarter: (_name: string): StarterDefinition => {
+			throw new Error("resolveStarter should not be called in this test");
+		},
 		...overrides,
 	};
 
@@ -70,12 +74,77 @@ function makeDefaultArgs(overrides: Partial<QueryArgs> = {}): QueryArgs {
 		model: undefined,
 		provider: undefined,
 		file: [],
-		timeout: 300,
+		timeout: undefined,
 		maxTurns: undefined,
 		noTui: true,
 		...overrides,
 	};
 }
+
+// ---------------------------------------------------------------------------
+// Fake starters for --template flag tests
+// ---------------------------------------------------------------------------
+
+const fakeResearchBrief: StarterDefinition = {
+	slug: "research-brief",
+	title: "Research Brief",
+	description: "Research a topic.",
+	nextStepCommand: 'sandcaster -T research-brief "prompt"',
+	aliases: ["competitive-analysis"],
+	configJson: {
+		systemPrompt: "You are a research analyst.",
+		model: "sonnet",
+		maxTurns: 20,
+	},
+	readme: "",
+};
+
+const fakeSecurityAudit: StarterDefinition = {
+	slug: "security-audit",
+	title: "Security Audit",
+	description: "Security audit.",
+	nextStepCommand: 'sandcaster -T security-audit "prompt"',
+	aliases: [],
+	configJson: {
+		systemPrompt: "You are a security lead.",
+		model: "sonnet",
+		maxTurns: 15,
+	},
+	readme: "",
+	extraFiles: {
+		".claude/skills/owasp-top-10/SKILL.md":
+			"# OWASP Top 10\nChecklist content...",
+	},
+};
+
+const fakeGeneralAssistant: StarterDefinition = {
+	slug: "general-assistant",
+	title: "General Assistant",
+	description: "General purpose.",
+	nextStepCommand: 'sandcaster "prompt"',
+	aliases: [],
+	configJson: {
+		systemPrompt: "You are helpful.",
+		model: "sonnet",
+		maxTurns: 15,
+	},
+	readme: "",
+};
+
+const fakeStarterWithTimeout: StarterDefinition = {
+	slug: "timeout-test",
+	title: "Timeout Test",
+	description: "Has custom timeout.",
+	nextStepCommand: 'sandcaster "prompt"',
+	aliases: [],
+	configJson: {
+		systemPrompt: "Test.",
+		model: "sonnet",
+		maxTurns: 10,
+		timeout: 600,
+	},
+	readme: "",
+};
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -243,6 +312,188 @@ describe("executeQuery", () => {
 			await executeQuery(makeDefaultArgs({ noTui: false }), deps);
 
 			expect(waitUntilExitCalled).toBe(true);
+		});
+	});
+
+	describe("--template flag", () => {
+		it("resolves starter and passes validated config instead of calling loadConfig", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: (name: string) => {
+					if (name === "research-brief") return fakeResearchBrief;
+					throw new Error(`Unknown starter: ${name}`);
+				},
+			});
+
+			await executeQuery(makeDefaultArgs({ template: "research-brief" }), deps);
+
+			expect(deps.capturedOptions?.config).toMatchObject({
+				systemPrompt: "You are a research analyst.",
+				model: "sonnet",
+				maxTurns: 20,
+			});
+		});
+
+		it("skips loadConfig when --template is set", async () => {
+			const loadConfigMock = vi
+				.fn<() => SandcasterConfig | null>()
+				.mockReturnValue(null);
+			const deps = makeDefaultDeps({
+				loadConfig: loadConfigMock,
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(makeDefaultArgs({ template: "research-brief" }), deps);
+
+			expect(loadConfigMock).not.toHaveBeenCalled();
+		});
+
+		it("prints error and exits 1 when template is unknown, listing available choices", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: (name: string) => {
+					throw new Error(
+						`Unknown starter "${name}". Choose one of: research-brief, general-assistant`,
+					);
+				},
+			});
+
+			await executeQuery(makeDefaultArgs({ template: "nonexistent" }), deps);
+
+			expect(deps.exit).toHaveBeenCalledWith(1);
+			const writeMock = deps.stdout.write as ReturnType<typeof vi.fn>;
+			expect(writeMock).toHaveBeenCalledWith(
+				expect.stringContaining("nonexistent"),
+			);
+			expect(writeMock).toHaveBeenCalledWith(
+				expect.stringContaining("research-brief"),
+			);
+		});
+
+		it("resolves alias to the canonical starter config", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: (name: string) => {
+					// competitive-analysis is an alias for research-brief
+					if (name === "competitive-analysis") return fakeResearchBrief;
+					throw new Error(`Unknown starter: ${name}`);
+				},
+			});
+
+			await executeQuery(
+				makeDefaultArgs({ template: "competitive-analysis" }),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.config).toMatchObject({
+				systemPrompt: "You are a research analyst.",
+				model: "sonnet",
+				maxTurns: 20,
+			});
+		});
+
+		it("injects extraFiles skill content into request.extraSkills", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeSecurityAudit,
+			});
+
+			await executeQuery(makeDefaultArgs({ template: "security-audit" }), deps);
+
+			expect(deps.capturedOptions?.request.extraSkills).toEqual({
+				"owasp-top-10": "# OWASP Top 10\nChecklist content...",
+			});
+		});
+
+		it("does not set extraSkills when starter has no extraFiles", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeGeneralAssistant,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({ template: "general-assistant" }),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.extraSkills).toBeUndefined();
+		});
+
+		it("uses explicit --model CLI arg over the template model", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({
+					template: "research-brief",
+					model: "claude-opus-4-5",
+				}),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.model).toBe("claude-opus-4-5");
+		});
+
+		it("applies template timeout via config when --timeout is not provided", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeStarterWithTimeout,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({ template: "timeout-test", timeout: undefined }),
+				deps,
+			);
+
+			// Template timeout lives in config, not in request
+			expect(deps.capturedOptions?.config).toMatchObject({ timeout: 600 });
+			expect(deps.capturedOptions?.request.timeout).toBeUndefined();
+		});
+
+		it("applies default timeout of 300 when --timeout is not provided and no template sets one", async () => {
+			const deps = makeDefaultDeps();
+
+			await executeQuery(makeDefaultArgs({ timeout: undefined }), deps);
+
+			expect(deps.capturedOptions?.request.timeout).toBe(300);
+		});
+
+		it("does not override config timeout with 300 fallback", async () => {
+			const deps = makeDefaultDeps({
+				loadConfig: () => ({ timeout: 600 }),
+			});
+
+			await executeQuery(makeDefaultArgs({ timeout: undefined }), deps);
+
+			expect(deps.capturedOptions?.request.timeout).toBeUndefined();
+			expect(deps.capturedOptions?.config).toMatchObject({ timeout: 600 });
+		});
+
+		it("uses explicit --provider over template provider", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({
+					template: "research-brief",
+					provider: "openrouter",
+				}),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.provider).toBe("openrouter");
+		});
+
+		it("uses explicit --maxTurns over template maxTurns", async () => {
+			const deps = makeDefaultDeps({
+				resolveStarter: () => fakeResearchBrief,
+			});
+
+			await executeQuery(
+				makeDefaultArgs({
+					template: "research-brief",
+					maxTurns: 5,
+				}),
+				deps,
+			);
+
+			expect(deps.capturedOptions?.request.maxTurns).toBe(5);
 		});
 	});
 });

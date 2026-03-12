@@ -84,18 +84,24 @@ export function useSSE(
 		};
 	}, []);
 
+	// Serialize files for stable dependency comparison (objects use Object.is)
+	const filesKey = files ? JSON.stringify(files) : null;
+
 	// Memoize the query iterable on all query params
 	const iterable = useMemo<AsyncIterable<SandcasterEvent> | null>(() => {
 		if (prompt === null || !client) return null;
+		const parsedFiles = filesKey
+			? (JSON.parse(filesKey) as Record<string, string>)
+			: undefined;
 		return client.query({
 			prompt,
 			model: model ?? undefined,
 			timeout: timeout ?? undefined,
 			maxTurns: maxTurns ?? undefined,
-			files: files ?? undefined,
+			files: parsedFiles,
 			provider: provider ?? undefined,
 		});
-	}, [client, prompt, model, timeout, maxTurns, files, provider]);
+	}, [client, prompt, model, timeout, maxTurns, filesKey, provider]);
 
 	return iterable;
 }

@@ -62,10 +62,9 @@ export function createEventTranslator(): {
 				const last = assistantMessages[assistantMessages.length - 1];
 
 				if (last.stopReason === "error") {
-					const content =
-						(last as AssistantMessage & { errorMessage?: string })
-							.errorMessage ?? "LLM request failed";
-					return [{ type: "error", content }];
+					// Error already emitted by the message_end handler — skip
+					// to avoid duplicate error events
+					return [];
 				}
 
 				const costUsd = last.usage?.cost?.total;

@@ -192,7 +192,7 @@ describe("createEventTranslator", () => {
 			expect((events[0] as { numTurns: number }).numTurns).toBe(3);
 		});
 
-		it("emits error event when last assistant message has stopReason error", () => {
+		it("returns empty array when last assistant message has stopReason error (already emitted by message_end)", () => {
 			const translator = createEventTranslator();
 			const errorAssistant = makeAssistantMessage({
 				stopReason: "error",
@@ -203,11 +203,8 @@ describe("createEventTranslator", () => {
 				messages: [errorAssistant],
 			});
 
-			expect(events).toHaveLength(1);
-			expect(events[0].type).toBe("error");
-			expect((events[0] as { content: string }).content).toContain(
-				"authentication_error",
-			);
+			// Error was already emitted by message_end — agent_end should not duplicate it
+			expect(events).toHaveLength(0);
 		});
 
 		it("emits result without usage info when messages is empty", () => {

@@ -7,8 +7,8 @@ export default defineConfig({
 			formats: ["es"],
 			fileName: () => "runner.mjs",
 		},
-		outDir: "src/runner/dist",
-		emptyOutDir: true,
+		outDir: "dist/runner",
+		emptyOutDir: false,
 		minify: false,
 		rollupOptions: {
 			external: [

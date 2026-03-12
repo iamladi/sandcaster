@@ -240,6 +240,7 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 		type: z.literal("error"),
 		content: z.string(),
 		code: z.string().optional(),
+		hint: z.string().optional(),
 	}),
 ]);
 

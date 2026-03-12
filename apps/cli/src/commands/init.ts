@@ -174,8 +174,13 @@ export async function executeInit(
 	const destDir = args.directory ?? starter.slug;
 
 	// Validate destination
-	if (deps.exists(destDir) && deps.isDir(destDir) && !deps.isEmpty(destDir)) {
-		if (!args.force) {
+	if (deps.exists(destDir)) {
+		if (!deps.isDir(destDir)) {
+			deps.stdout.write(`Error: "${destDir}" exists and is not a directory.\n`);
+			deps.exit(1);
+			return;
+		}
+		if (!deps.isEmpty(destDir) && !args.force) {
 			deps.stdout.write(
 				`Error: directory "${destDir}" already exists and is not empty. Use --force to overwrite.\n`,
 			);
@@ -257,9 +262,7 @@ const prodDeps: InitDeps = {
 // citty command definition
 // ---------------------------------------------------------------------------
 
-export type CommandDef = ReturnType<typeof defineCommand>;
-
-export const initCommand: CommandDef = defineCommand({
+export const initCommand = defineCommand({
 	meta: {
 		name: "init",
 		description: "Initialize a sandcaster.json config from a starter template",
