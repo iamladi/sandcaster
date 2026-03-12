@@ -1,6 +1,6 @@
 # Sandcaster
 
-TypeScript monorepo rewriting [Sandstorm](../sandstorm) — a runtime for AI agents in isolated E2B sandboxes.
+A runtime for AI agents in isolated E2B sandboxes. (inspired by https://github.com/tomascupr/sandstorm)
 
 ## TDD
 
