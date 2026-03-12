@@ -44,6 +44,18 @@ describe("stripIncompleteInline", () => {
 	it("strips trailing double underscores", () => {
 		expect(stripIncompleteInline("bold text __")).toBe("bold text ");
 	});
+
+	it("strips trailing single asterisk", () => {
+		expect(stripIncompleteInline("italic text *")).toBe("italic text ");
+	});
+
+	it("strips trailing triple asterisks", () => {
+		expect(stripIncompleteInline("bold-italic ***")).toBe("bold-italic ");
+	});
+
+	it("strips marker at start of string", () => {
+		expect(stripIncompleteInline("**")).toBe("");
+	});
 });
 
 describe("MarkdownText", () => {

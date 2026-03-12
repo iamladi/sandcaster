@@ -32,16 +32,10 @@ export function App({ eventSource, onExit }: AppProps): React.ReactElement {
 
 	const statusBarProps = {
 		status: state.status,
-		...(state.result?.model !== undefined ? { model: state.result.model } : {}),
-		...(state.result?.numTurns !== undefined
-			? { numTurns: state.result.numTurns }
-			: {}),
-		...(state.result?.costUsd !== undefined
-			? { costUsd: state.result.costUsd }
-			: {}),
-		...(state.result?.durationSecs !== undefined
-			? { durationSecs: state.result.durationSecs }
-			: {}),
+		model: state.result?.model,
+		numTurns: state.result?.numTurns,
+		costUsd: state.result?.costUsd,
+		durationSecs: state.result?.durationSecs,
 	};
 
 	return (
@@ -49,7 +43,10 @@ export function App({ eventSource, onExit }: AppProps): React.ReactElement {
 			<Static items={state.completedTurns}>
 				{(turn, index) => <AgentStream key={index} events={turn} />}
 			</Static>
-			<AgentStream events={state.currentTurn} />
+			<AgentStream
+				events={state.currentTurn}
+				assistantText={state.assistantText}
+			/>
 			<StatusBar {...statusBarProps} />
 		</Box>
 	);

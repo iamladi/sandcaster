@@ -3,6 +3,14 @@ import { render } from "ink-testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../../tui/App.js";
 
+vi.mock("ink", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("ink")>();
+	return {
+		...actual,
+		useStdoutDimensions: () => [80, 24],
+	};
+});
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -28,9 +36,14 @@ function waitFor(ms: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 describe("App", () => {
-	it("renders streaming events from fake async generator", async () => {
+	it("renders assistant content from completed turn", async () => {
 		const events: SandcasterEvent[] = [
 			{ type: "assistant", subtype: "delta", content: "Hello from agent" },
+			{
+				type: "assistant",
+				subtype: "complete",
+				content: "Hello from agent",
+			},
 			{ type: "result", content: "done" },
 		];
 		const { lastFrame } = render(<App eventSource={makeEventSource(events)} />);
@@ -42,6 +55,7 @@ describe("App", () => {
 		const onExit = vi.fn();
 		const events: SandcasterEvent[] = [
 			{ type: "assistant", subtype: "delta", content: "output" },
+			{ type: "assistant", subtype: "complete", content: "output" },
 			{
 				type: "result",
 				content: "done",

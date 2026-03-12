@@ -14,7 +14,8 @@
 	"scripts": {
 		"build": "tsc",
 		"lint": "biome check .",
-		"test": "vitest run"
+		"test": "vitest run",
+		"test:e2e": "vitest run --config vitest.e2e.config.ts"
 	},
 	"bin": {
 		"sandcaster": "./dist/index.js"
@@ -25,7 +26,10 @@
 		"@sandcaster/sdk": "workspace:*",
 		"citty": "^0.2.1",
 		"ink": "^6.8.0",
-		"react": "^19.2.4"
+		"marked": "15",
+		"marked-terminal": "7.3.0",
+		"react": "^19.2.4",
+		"wrap-ansi": "10"
 	},
 	"devDependencies": {
 		"@sandcaster/ts-config": "workspace:*",
