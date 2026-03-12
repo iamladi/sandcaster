@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 const mockSetTools = vi.fn();
 const mockSetModel = vi.fn();
 const mockSetSystemPrompt = vi.fn();
-const mockSubscribe = vi.fn();
+const mockAbort = vi.fn();
+let _subscribeFn: ((event: any) => void) | null = null;
+const mockSubscribe = vi.fn().mockImplementation((fn: any) => {
+	_subscribeFn = fn;
+	return () => {};
+});
 const mockPrompt = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@mariozechner/pi-agent-core", () => {
@@ -14,6 +19,7 @@ vi.mock("@mariozechner/pi-agent-core", () => {
 			setSystemPrompt = mockSetSystemPrompt;
 			subscribe = mockSubscribe;
 			prompt = mockPrompt;
+			abort = mockAbort;
 		},
 	};
 });
@@ -78,5 +84,58 @@ describe("runAgent", () => {
 		await runAgent({ prompt: "hello" }, process.env, vi.fn());
 
 		expect(mockSetSystemPrompt).not.toHaveBeenCalled();
+	});
+
+	it("aborts agent when max_turns is reached", async () => {
+		// Make prompt simulate emitting turn_end events
+		mockPrompt.mockImplementationOnce(async () => {
+			if (_subscribeFn) {
+				_subscribeFn({ type: "turn_end" });
+				_subscribeFn({ type: "turn_end" });
+				_subscribeFn({ type: "turn_end" });
+			}
+		});
+
+		await runAgent({ prompt: "hello", max_turns: 2 }, process.env, vi.fn());
+
+		expect(mockAbort).toHaveBeenCalled();
+	});
+
+	it("does not abort when turns are under max_turns", async () => {
+		mockAbort.mockClear();
+		mockPrompt.mockImplementationOnce(async () => {
+			if (_subscribeFn) {
+				_subscribeFn({ type: "turn_end" });
+			}
+		});
+
+		await runAgent({ prompt: "hello", max_turns: 5 }, process.env, vi.fn());
+
+		expect(mockAbort).not.toHaveBeenCalled();
+	});
+
+	it("aborts agent when timeout is reached", async () => {
+		vi.useFakeTimers();
+		mockAbort.mockClear();
+
+		// Make prompt hang until we advance time
+		mockPrompt.mockImplementationOnce(
+			() => new Promise((resolve) => setTimeout(resolve, 10000)),
+		);
+
+		const promise = runAgent(
+			{ prompt: "hello", timeout: 5 },
+			process.env,
+			vi.fn(),
+		);
+
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(mockAbort).toHaveBeenCalled();
+
+		// Resolve the hung prompt
+		await vi.advanceTimersByTimeAsync(5000);
+		await promise;
+		vi.useRealTimers();
 	});
 });

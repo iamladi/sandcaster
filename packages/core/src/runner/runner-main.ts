@@ -25,11 +25,35 @@ export async function runAgent(
 		agent.setSystemPrompt(config.system_prompt as string);
 	}
 
+	const maxTurns =
+		typeof config.max_turns === "number" ? config.max_turns : undefined;
+	let turnCount = 0;
+
 	agent.subscribe((event: AgentEvent) => {
+		if (event.type === "turn_end") {
+			turnCount++;
+			if (maxTurns !== undefined && turnCount >= maxTurns) {
+				agent.abort();
+			}
+		}
 		for (const translated of translator.translate(event)) {
 			emit(translated);
 		}
 	});
 
-	await agent.prompt(config.prompt as string);
+	// Enforce timeout from config
+	const timeoutSecs =
+		typeof config.timeout === "number" ? config.timeout : undefined;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	if (timeoutSecs !== undefined) {
+		timer = setTimeout(() => {
+			agent.abort();
+		}, timeoutSecs * 1000);
+	}
+
+	try {
+		await agent.prompt(config.prompt as string);
+	} finally {
+		if (timer !== undefined) clearTimeout(timer);
+	}
 }
