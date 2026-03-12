@@ -2,7 +2,11 @@ import { serve } from "@hono/node-server";
 import type { AppDeps } from "@sandcaster/api";
 import { createApp as apiCreateApp } from "@sandcaster/api";
 import type { SandcasterConfig } from "@sandcaster/core";
-import { loadConfig as coreLoadConfig } from "@sandcaster/core";
+import {
+	loadConfig as coreLoadConfig,
+	createRunStore,
+	runAgentInSandbox,
+} from "@sandcaster/core";
 import { defineCommand } from "citty";
 import type { Hono } from "hono";
 
@@ -19,6 +23,8 @@ export interface ServeDeps {
 	loadConfig: (dir?: string) => SandcasterConfig | null;
 	createApp: (deps: AppDeps) => Hono;
 	startServer: (app: Hono, options: { port: number; hostname: string }) => void;
+	runAgent: AppDeps["runAgent"];
+	createRunStore: () => NonNullable<AppDeps["runStore"]>;
 	stdout: { write: (data: string) => boolean };
 	exit: (code: number) => void;
 }
@@ -56,6 +62,8 @@ export async function executeServe(
 		webhookSecret,
 		corsOrigins,
 		version,
+		runAgent: deps.runAgent,
+		runStore: deps.createRunStore(),
 	});
 
 	deps.startServer(app, { port: args.port, hostname: args.host });
@@ -79,6 +87,8 @@ const prodDeps: ServeDeps = {
 	loadConfig: coreLoadConfig,
 	createApp: apiCreateApp,
 	startServer: startServerProd,
+	runAgent: runAgentInSandbox,
+	createRunStore,
 	stdout: process.stdout,
 	exit: (code: number) => process.exit(code),
 };

@@ -13,6 +13,8 @@ function makeDefaultDeps(overrides: Partial<ServeDeps> = {}): ServeDeps {
 		loadConfig: (_dir?: string): SandcasterConfig | null => null,
 		createApp: vi.fn().mockReturnValue(new Hono()),
 		startServer: vi.fn(),
+		runAgent: vi.fn(),
+		createRunStore: vi.fn().mockReturnValue({}),
 		stdout: { write: vi.fn<(data: string) => boolean>().mockReturnValue(true) },
 		exit: vi.fn<(code: number) => void>(),
 		...overrides,
@@ -170,6 +172,33 @@ describe("executeServe", () => {
 			expect(deps.createApp).toHaveBeenCalledWith(
 				expect.objectContaining({ corsOrigins: undefined }),
 			);
+		});
+	});
+
+	describe("agent runner wiring", () => {
+		it("passes runAgent and runStore to createApp", async () => {
+			const runAgent = vi.fn();
+			const runStore = {} as any;
+			const createRunStore = vi.fn().mockReturnValue(runStore);
+			const deps = makeDefaultDeps({ runAgent, createRunStore });
+
+			await executeServe(makeDefaultArgs(), deps);
+
+			expect(deps.createApp).toHaveBeenCalledWith(
+				expect.objectContaining({
+					runAgent,
+					runStore,
+				}),
+			);
+		});
+
+		it("calls createRunStore to build the run store", async () => {
+			const createRunStore = vi.fn().mockReturnValue({});
+			const deps = makeDefaultDeps({ createRunStore });
+
+			await executeServe(makeDefaultArgs(), deps);
+
+			expect(createRunStore).toHaveBeenCalledTimes(1);
 		});
 	});
 
