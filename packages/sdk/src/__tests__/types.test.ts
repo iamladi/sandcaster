@@ -116,6 +116,15 @@ describe("SandcasterEvent discriminated union", () => {
 			expectTypeOf(event).toEqualTypeOf<ErrorEvent>();
 		}
 	});
+
+	it("ErrorEvent includes optional hint field", () => {
+		const event: ErrorEvent = {
+			type: "error",
+			content: "fail",
+			hint: "try this",
+		};
+		expectTypeOf(event.hint).toEqualTypeOf<string | undefined>();
+	});
 });
 
 // ---------------------------------------------------------------------------

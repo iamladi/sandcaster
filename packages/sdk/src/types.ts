@@ -63,6 +63,7 @@ export interface ErrorEvent {
 	type: "error";
 	content: string;
 	code?: string;
+	hint?: string;
 }
 
 export type SandcasterEvent =
