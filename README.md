@@ -45,7 +45,11 @@ its work in a rich TUI, and tears itself down when the run is done.
 ## 60-second path
 
 ```bash
-bun install -g @sandcaster/cli
+git clone https://github.com/iamladi/sandcaster.git
+cd sandcaster
+bun install && bunx turbo build
+cd apps/cli && bun link      # registers the `sandcaster` command globally
+
 sandcaster init
 cd general-assistant
 sandcaster "Compare Notion, Coda, and Slite for async product teams"
