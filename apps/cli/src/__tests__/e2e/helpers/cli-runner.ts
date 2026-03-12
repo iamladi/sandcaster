@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const CLI_ENTRY = resolve(import.meta.dirname, "../../../../dist/index.js");
 
 // ANSI escape codes
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape stripping
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
 export interface RunResult {

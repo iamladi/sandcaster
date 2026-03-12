@@ -45,6 +45,7 @@ export function AgentStream({
 	return (
 		<Box flexDirection="column">
 			{nonAssistantEvents.map((event, index) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: events are append-only from stream
 				<EventLine key={index} event={event} />
 			))}
 			{assistantContent && (
