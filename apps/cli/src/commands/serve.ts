@@ -31,7 +31,7 @@ export async function executeServe(
 	args: ServeArgs,
 	deps: ServeDeps,
 ): Promise<void> {
-	deps.loadConfig();
+	const _config = deps.loadConfig();
 
 	const apiKey = process.env.SANDCASTER_API_KEY;
 	const webhookSecret =
@@ -108,7 +108,7 @@ export const serveCommand = defineCommand({
 	},
 	async run({ args }) {
 		const port = Number(args.port);
-		if (!Number.isFinite(port) || port < 1) {
+		if (!Number.isFinite(port) || port < 1 || port > 65535) {
 			console.error(`Invalid --port value: ${args.port}`);
 			process.exit(1);
 		}

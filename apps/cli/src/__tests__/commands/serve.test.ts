@@ -1,6 +1,6 @@
 import type { SandcasterConfig } from "@sandcaster/core";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ServeArgs, ServeDeps } from "../../commands/serve.js";
 import { executeServe } from "../../commands/serve.js";
 
@@ -32,14 +32,8 @@ function makeDefaultArgs(overrides: Partial<ServeArgs> = {}): ServeArgs {
 // ---------------------------------------------------------------------------
 
 describe("executeServe", () => {
-	const originalEnv = process.env;
-
-	beforeEach(() => {
-		process.env = { ...originalEnv };
-	});
-
 	afterEach(() => {
-		process.env = originalEnv;
+		vi.unstubAllEnvs();
 	});
 
 	describe("server startup", () => {
@@ -110,7 +104,7 @@ describe("executeServe", () => {
 		});
 
 		it("passes apiKey from env to createApp", async () => {
-			process.env.SANDCASTER_API_KEY = "test-api-key";
+			vi.stubEnv("SANDCASTER_API_KEY", "test-api-key");
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);
@@ -121,7 +115,6 @@ describe("executeServe", () => {
 		});
 
 		it("passes undefined apiKey when env var is not set", async () => {
-			delete process.env.SANDCASTER_API_KEY;
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);
@@ -132,8 +125,7 @@ describe("executeServe", () => {
 		});
 
 		it("passes webhookSecret from SANDSTORM_WEBHOOK_SECRET compat env var", async () => {
-			process.env.SANDSTORM_WEBHOOK_SECRET = "compat-secret";
-			delete process.env.SANDCASTER_WEBHOOK_SECRET;
+			vi.stubEnv("SANDSTORM_WEBHOOK_SECRET", "compat-secret");
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);
@@ -144,8 +136,8 @@ describe("executeServe", () => {
 		});
 
 		it("prefers SANDCASTER_WEBHOOK_SECRET over SANDSTORM_WEBHOOK_SECRET", async () => {
-			process.env.SANDSTORM_WEBHOOK_SECRET = "compat-secret";
-			process.env.SANDCASTER_WEBHOOK_SECRET = "new-secret";
+			vi.stubEnv("SANDSTORM_WEBHOOK_SECRET", "compat-secret");
+			vi.stubEnv("SANDCASTER_WEBHOOK_SECRET", "new-secret");
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);
@@ -156,7 +148,7 @@ describe("executeServe", () => {
 		});
 
 		it("passes corsOrigins as array from comma-separated env var", async () => {
-			process.env.SANDCASTER_CORS_ORIGINS = "https://a.com,https://b.com";
+			vi.stubEnv("SANDCASTER_CORS_ORIGINS", "https://a.com,https://b.com");
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);
@@ -169,7 +161,8 @@ describe("executeServe", () => {
 		});
 
 		it("passes undefined corsOrigins when env var is not set", async () => {
-			delete process.env.SANDCASTER_CORS_ORIGINS;
+			// Don't stub — env var not present by default
+			vi.stubEnv("SANDCASTER_CORS_ORIGINS", "");
 			const deps = makeDefaultDeps();
 
 			await executeServe(makeDefaultArgs(), deps);

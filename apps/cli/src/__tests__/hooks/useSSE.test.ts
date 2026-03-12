@@ -160,12 +160,15 @@ describe("useSSE", () => {
 
 	describe("cleanup", () => {
 		it("disposes the client on unmount", async () => {
-			let capturedClient:
-				| (SandcasterClientLike & { disposed: boolean })
-				| null = null;
-			const createClient = vi.fn(() => {
-				capturedClient = makeFakeClient();
-				return capturedClient;
+			let disposed = false;
+			const createClient = vi.fn((): SandcasterClientLike => {
+				const base = makeFakeClient();
+				return {
+					query: base.query.bind(base),
+					async [Symbol.asyncDispose]() {
+						disposed = true;
+					},
+				};
 			});
 			const options: UseSSEOptions = {
 				baseUrl: "http://localhost:3000",
@@ -175,7 +178,7 @@ describe("useSSE", () => {
 			unmount();
 			// Give async dispose a tick to run
 			await Promise.resolve();
-			expect(capturedClient?.disposed).toBe(true);
+			expect(disposed).toBe(true);
 		});
 	});
 });

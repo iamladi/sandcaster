@@ -235,6 +235,18 @@ describe("executeInit", () => {
 	});
 
 	describe("directory validation", () => {
+		it("exits with 1 when destination exists but is not a directory", async () => {
+			const deps = makeDeps({
+				exists: vi.fn().mockReturnValue(true),
+				isDir: vi.fn().mockReturnValue(false),
+			});
+			await executeInit(makeArgs({ starter: "test-starter" }), deps);
+
+			expect(deps.exit).toHaveBeenCalledWith(1);
+			expect(deps.output).toContain("not a directory");
+			expect(deps.written.size).toBe(0);
+		});
+
 		it("exits with 1 when directory exists, is non-empty, and no --force", async () => {
 			const deps = makeDeps({
 				exists: vi.fn().mockReturnValue(true),
