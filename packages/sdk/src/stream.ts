@@ -34,7 +34,7 @@ export async function* parseSSEStream(
 	signal?: AbortSignal,
 ): AsyncGenerator<SandcasterEvent> {
 	const reader = body
-		.pipeThrough(new TextDecoderStream())
+		.pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
 		.pipeThrough(new EventSourceParserStream())
 		.getReader();
 
