@@ -18,6 +18,7 @@ export interface AgentState {
 	events: SandcasterEvent[];
 	completedTurns: SandcasterEvent[][];
 	currentTurn: SandcasterEvent[];
+	assistantText: string;
 	result: ResultInfo | null;
 	error: string | null;
 }
@@ -31,6 +32,7 @@ export const initialAgentState: AgentState = {
 	events: [],
 	completedTurns: [],
 	currentTurn: [],
+	assistantText: "",
 	result: null,
 	error: null,
 };
@@ -48,6 +50,15 @@ export function reduceAgentState(
 
 	// Status transitions to running on first event (if still idle)
 	const baseStatus = state.status === "idle" ? "running" : state.status;
+
+	if (event.type === "assistant" && event.subtype === "delta") {
+		return {
+			...state,
+			status: baseStatus,
+			events,
+			assistantText: state.assistantText + event.content,
+		};
+	}
 
 	if (event.type === "result") {
 		// Push remaining currentTurn (including this event) to completedTurns
@@ -70,6 +81,7 @@ export function reduceAgentState(
 			events,
 			completedTurns,
 			currentTurn: [],
+			assistantText: "",
 			result: resultInfo,
 		};
 	}
@@ -93,6 +105,7 @@ export function reduceAgentState(
 			events,
 			completedTurns: [...state.completedTurns, completedTurn],
 			currentTurn: [],
+			assistantText: "",
 		};
 	}
 

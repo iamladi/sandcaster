@@ -113,15 +113,12 @@ describe("reduceAgentState", () => {
 	});
 
 	describe("turn grouping", () => {
-		it("accumulates events in currentTurn before completion", () => {
+		it("does not accumulate delta events in currentTurn", () => {
 			const state = applyEvents([
 				{ type: "assistant", subtype: "delta", content: "part 1" },
 				{ type: "assistant", subtype: "delta", content: "part 2" },
 			]);
-			expect(state.currentTurn).toEqual([
-				{ type: "assistant", subtype: "delta", content: "part 1" },
-				{ type: "assistant", subtype: "delta", content: "part 2" },
-			]);
+			expect(state.currentTurn).toEqual([]);
 			expect(state.completedTurns).toEqual([]);
 		});
 
@@ -131,8 +128,8 @@ describe("reduceAgentState", () => {
 				{ type: "assistant", subtype: "complete", content: "part 1" },
 			]);
 			expect(state.completedTurns).toHaveLength(1);
+			// Only the complete event is in the flushed turn (delta goes to assistantText, not currentTurn)
 			expect(state.completedTurns[0]).toEqual([
-				{ type: "assistant", subtype: "delta", content: "part 1" },
 				{ type: "assistant", subtype: "complete", content: "part 1" },
 			]);
 			expect(state.currentTurn).toEqual([]);
@@ -166,9 +163,9 @@ describe("reduceAgentState", () => {
 				{ type: "assistant", subtype: "delta", content: "final" },
 				{ type: "result", content: "done", costUsd: 0.01 },
 			]);
+			// delta goes to assistantText only; result flushes currentTurn (empty) + result event
 			expect(state.completedTurns).toHaveLength(1);
 			expect(state.completedTurns[0]).toEqual([
-				{ type: "assistant", subtype: "delta", content: "final" },
 				{ type: "result", content: "done", costUsd: 0.01 },
 			]);
 			expect(state.currentTurn).toEqual([]);
@@ -231,6 +228,69 @@ describe("reduceAgentState", () => {
 		it("keeps error null until error event", () => {
 			const state = applyEvents([{ type: "system", content: "hello" }]);
 			expect(state.error).toBeNull();
+		});
+	});
+
+	describe("assistantText accumulation", () => {
+		it("accumulates content from delta events", () => {
+			const state = applyEvents([
+				{ type: "assistant", subtype: "delta", content: "Hello" },
+				{ type: "assistant", subtype: "delta", content: ", " },
+				{ type: "assistant", subtype: "delta", content: "world" },
+			]);
+			expect(state.assistantText).toBe("Hello, world");
+		});
+
+		it("does not add delta events to currentTurn", () => {
+			const state = applyEvents([
+				{ type: "assistant", subtype: "delta", content: "Hello" },
+			]);
+			expect(state.currentTurn).toHaveLength(0);
+		});
+
+		it("adds delta events to events array", () => {
+			const ev: SandcasterEvent = {
+				type: "assistant",
+				subtype: "delta",
+				content: "Hello",
+			};
+			const state = applyEvents([ev]);
+			expect(state.events).toContain(ev);
+		});
+
+		it("clears assistantText on assistant/complete", () => {
+			const state = applyEvents([
+				{ type: "assistant", subtype: "delta", content: "Hello" },
+				{ type: "assistant", subtype: "delta", content: " world" },
+				{ type: "assistant", subtype: "complete", content: "" },
+			]);
+			expect(state.assistantText).toBe("");
+		});
+
+		it("clears assistantText on result event", () => {
+			const state = applyEvents([
+				{ type: "assistant", subtype: "delta", content: "Hello" },
+				{ type: "result", content: "done" },
+			]);
+			expect(state.assistantText).toBe("");
+		});
+
+		it("non-assistant events still go to currentTurn", () => {
+			const ev: SandcasterEvent = {
+				type: "tool_use",
+				toolName: "bash",
+				content: "ls",
+			};
+			const state = applyEvents([ev]);
+			expect(state.currentTurn).toContain(ev);
+		});
+
+		it("transitions status to running on first delta event", () => {
+			expect(initialAgentState.status).toBe("idle");
+			const state = applyEvents([
+				{ type: "assistant", subtype: "delta", content: "hi" },
+			]);
+			expect(state.status).toBe("running");
 		});
 	});
 });
