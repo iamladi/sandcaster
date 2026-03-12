@@ -307,6 +307,33 @@ describe("SandcasterClient", () => {
 		});
 	});
 
+	describe("abort reason forwarding", () => {
+		it("forwards abort reason when signal is already aborted", async () => {
+			fetchMock.mockImplementation(
+				(_url: string, init: RequestInit) =>
+					new Promise((_resolve, reject) => {
+						const sig = init.signal;
+						if (sig?.aborted) {
+							reject(sig.reason ?? new DOMException("aborted"));
+							return;
+						}
+						sig?.addEventListener("abort", () => {
+							reject(sig.reason ?? new DOMException("aborted"));
+						});
+					}),
+			);
+
+			const reason = new Error("custom abort reason");
+			const signal = AbortSignal.abort(reason);
+			const client = new SandcasterClient({ baseUrl: "http://localhost:3000" });
+			const iterator = client
+				.query({ prompt: "test" }, { signal })
+				[Symbol.asyncIterator]();
+
+			await expect(iterator.next()).rejects.toThrow("custom abort reason");
+		});
+	});
+
 	describe("iterator return()", () => {
 		it("does not throw when generatorPromise rejects", async () => {
 			fetchMock.mockRejectedValue(new Error("network failure"));

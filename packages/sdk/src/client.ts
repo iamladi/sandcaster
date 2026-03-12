@@ -48,7 +48,7 @@ export class SandcasterClient {
 				// Link external signal to internal controller
 				if (options?.signal) {
 					if (options.signal.aborted) {
-						controller.abort();
+						controller.abort(options.signal.reason);
 					} else {
 						options.signal.addEventListener(
 							"abort",
