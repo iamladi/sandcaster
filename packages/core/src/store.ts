@@ -70,10 +70,13 @@ export function createRunStore(opts?: {
 		model: string | null,
 		filesCount = 0,
 	): Run {
-		// Evict oldest entry when at max capacity
+		// Evict oldest non-running entry when at max capacity
 		if (order.length >= maxEntries) {
-			const evicted = order.shift();
-			if (evicted) index.delete(evicted.id);
+			const evictIdx = order.findIndex((r) => r.status !== "running");
+			if (evictIdx !== -1) {
+				const [evicted] = order.splice(evictIdx, 1);
+				index.delete(evicted.id);
+			}
 		}
 
 		const run: Run = {

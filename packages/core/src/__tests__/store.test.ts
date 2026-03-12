@@ -214,15 +214,16 @@ describe("createRunStore", () => {
 	// eviction
 	// -------------------------------------------------------------------------
 
-	it("evicts oldest entry when at max capacity", () => {
+	it("evicts oldest completed entry when at max capacity", () => {
 		const store = createRunStore({
 			path: join(tmpDir, "runs.jsonl"),
 			maxEntries: 3,
 		});
 		store.create("run-a", "first", null);
+		store.complete("run-a");
 		store.create("run-b", "second", null);
 		store.create("run-c", "third", null);
-		store.create("run-d", "fourth", null); // evicts run-a
+		store.create("run-d", "fourth", null); // evicts run-a (completed)
 
 		const runs = store.list(10);
 		const ids = runs.map((r) => r.id);
@@ -231,6 +232,42 @@ describe("createRunStore", () => {
 		expect(ids).toContain("run-c");
 		expect(ids).toContain("run-d");
 		expect(runs.length).toBe(3);
+	});
+
+	it("skips running entries during eviction and evicts next completed one", () => {
+		const store = createRunStore({
+			path: join(tmpDir, "runs.jsonl"),
+			maxEntries: 3,
+		});
+		store.create("run-a", "first", null); // still running
+		store.create("run-b", "second", null);
+		store.complete("run-b");
+		store.create("run-c", "third", null);
+		store.create("run-d", "fourth", null); // should evict run-b (completed), not run-a (running)
+
+		const runs = store.list(10);
+		const ids = runs.map((r) => r.id);
+		expect(ids).toContain("run-a"); // running — protected
+		expect(ids).not.toContain("run-b"); // completed — evicted
+		expect(ids).toContain("run-c");
+		expect(ids).toContain("run-d");
+	});
+
+	it("preserves complete/fail calls for still-running entries after eviction of others", () => {
+		const store = createRunStore({
+			path: join(tmpDir, "runs.jsonl"),
+			maxEntries: 2,
+		});
+		store.create("run-a", "first", null);
+		store.create("run-b", "second", null);
+		store.complete("run-b"); // run-b completed
+		store.create("run-c", "third", null); // evicts run-b
+
+		// run-a should still be completable
+		store.complete("run-a");
+		const runs = store.list(10);
+		const runA = runs.find((r) => r.id === "run-a");
+		expect(runA?.status).toBe("completed");
 	});
 
 	// -------------------------------------------------------------------------
