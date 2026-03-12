@@ -1,15 +1,58 @@
 import type { SandcasterEvent } from "@sandcaster/core";
 import { render } from "ink-testing-library";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AgentStream } from "../../tui/AgentStream.js";
 
+vi.mock("ink", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("ink")>();
+	return {
+		...actual,
+		useStdoutDimensions: () => [80, 24],
+	};
+});
+
 describe("AgentStream", () => {
-	it("renders assistant text content", () => {
+	it("renders assistant text content via assistantText prop", () => {
+		const { lastFrame } = render(
+			<AgentStream events={[]} assistantText="Hello, world!" />,
+		);
+		expect(lastFrame()).toContain("Hello, world!");
+	});
+
+	it("renders assistantText prop through markdown when provided", () => {
+		const { lastFrame } = render(
+			<AgentStream events={[]} assistantText="Hello world" />,
+		);
+		expect(lastFrame()).toContain("Hello world");
+	});
+
+	it("extracts assistant/complete content for completed turns", () => {
 		const events: SandcasterEvent[] = [
-			{ type: "assistant", subtype: "delta", content: "Hello, world!" },
+			{ type: "assistant", subtype: "complete", content: "Completed response" },
 		];
 		const { lastFrame } = render(<AgentStream events={events} />);
-		expect(lastFrame()).toContain("Hello, world!");
+		expect(lastFrame()).toContain("Completed response");
+	});
+
+	it("does not render assistant delta events as separate lines", () => {
+		const events: SandcasterEvent[] = [
+			{ type: "assistant", subtype: "delta", content: "delta chunk" },
+		];
+		const { lastFrame } = render(<AgentStream events={events} />);
+		// Without assistantText or a complete event, delta events should not render
+		expect(lastFrame()).not.toContain("delta chunk");
+	});
+
+	it("renders non-assistant events alongside markdown text", () => {
+		const events: SandcasterEvent[] = [
+			{ type: "tool_use", toolName: "bash", content: '{"cmd":"ls"}' },
+		];
+		const { lastFrame } = render(
+			<AgentStream events={events} assistantText="Hello world" />,
+		);
+		const frame = lastFrame() ?? "";
+		expect(frame).toContain("[tool: bash]");
+		expect(frame).toContain("Hello world");
 	});
 
 	it("renders tool use name", () => {
@@ -86,10 +129,34 @@ describe("AgentStream", () => {
 		expect(lastFrame()).toContain("stderr output here");
 	});
 
+	it("renders hint text below error message when hint is present", () => {
+		const events: SandcasterEvent[] = [
+			{
+				type: "error",
+				content: "Sandbox template 'bad' not found.",
+				code: "TEMPLATE_NOT_FOUND",
+				hint: "Run: bun run scripts/create-template.ts",
+			},
+		];
+		const { lastFrame } = render(<AgentStream events={events} />);
+		const frame = lastFrame() ?? "";
+		expect(frame).toContain("Sandbox template 'bad' not found.");
+		expect(frame).toContain("Run: bun run scripts/create-template.ts");
+	});
+
+	it("renders error without hint when hint is absent", () => {
+		const events: SandcasterEvent[] = [
+			{ type: "error", content: "Unknown error", code: "SANDBOX_ERROR" },
+		];
+		const { lastFrame } = render(<AgentStream events={events} />);
+		const frame = lastFrame() ?? "";
+		expect(frame).toContain("Unknown error");
+	});
+
 	it("renders multiple events in order", () => {
 		const events: SandcasterEvent[] = [
-			{ type: "assistant", subtype: "delta", content: "First" },
-			{ type: "assistant", subtype: "delta", content: "Second" },
+			{ type: "system", content: "First" },
+			{ type: "system", content: "Second" },
 		];
 		const { lastFrame } = render(<AgentStream events={events} />);
 		const frame = lastFrame() ?? "";

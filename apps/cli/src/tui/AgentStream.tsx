@@ -1,5 +1,7 @@
 import type { SandcasterEvent } from "@sandcaster/core";
-import { Text } from "ink";
+import { Box, Text } from "ink";
+import { useMemo } from "react";
+import { MarkdownText } from "./MarkdownText.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -7,19 +9,48 @@ import { Text } from "ink";
 
 export interface AgentStreamProps {
 	events: SandcasterEvent[];
+	assistantText?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function AgentStream({ events }: AgentStreamProps): React.ReactElement {
+export function AgentStream({
+	events,
+	assistantText,
+}: AgentStreamProps): React.ReactElement {
+	const { assistantContent, isStreaming, nonAssistantEvents } = useMemo(() => {
+		let content = assistantText ?? "";
+		const streaming = !!assistantText;
+
+		if (!streaming) {
+			// For completed turns: extract from complete event
+			const completeEvent = events.find(
+				(e) => e.type === "assistant" && e.subtype === "complete",
+			);
+			if (completeEvent && completeEvent.type === "assistant") {
+				content = completeEvent.content;
+			}
+		}
+
+		const other = events.filter((e) => e.type !== "assistant");
+		return {
+			assistantContent: content,
+			isStreaming: streaming,
+			nonAssistantEvents: other,
+		};
+	}, [events, assistantText]);
+
 	return (
-		<>
-			{events.map((event, index) => (
+		<Box flexDirection="column">
+			{nonAssistantEvents.map((event, index) => (
 				<EventLine key={index} event={event} />
 			))}
-		</>
+			{assistantContent && (
+				<MarkdownText content={assistantContent} streaming={isStreaming} />
+			)}
+		</Box>
 	);
 }
 
@@ -57,7 +88,16 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 			return <Text dimColor>{event.content}</Text>;
 
 		case "error":
-			return <Text color="red">{event.content}</Text>;
+			return (
+				<Box flexDirection="column">
+					<Text color="red">{event.content}</Text>
+					{event.hint && (
+						<Text dimColor color="yellow">
+							{event.hint}
+						</Text>
+					)}
+				</Box>
+			);
 
 		case "result":
 			return <Text>{event.content}</Text>;
