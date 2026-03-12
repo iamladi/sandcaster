@@ -54,6 +54,7 @@ export function registerQueryRoutes(
 
 				let costUsd: number | undefined;
 				let numTurns: number | undefined;
+				let durationSecs: number | undefined;
 				let model: string | undefined;
 
 				try {
@@ -66,6 +67,7 @@ export function registerQueryRoutes(
 						if (event.type === "result") {
 							costUsd = event.costUsd;
 							numTurns = event.numTurns;
+							durationSecs = event.durationSecs;
 							model = event.model;
 						}
 
@@ -78,6 +80,7 @@ export function registerQueryRoutes(
 					opts.runStore?.complete(requestId, {
 						costUsd,
 						numTurns,
+						durationSecs,
 						model,
 					});
 				} catch (err) {
