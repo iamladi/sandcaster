@@ -373,6 +373,52 @@ describe("runAgentInSandbox", () => {
 		});
 	});
 
+	it("forwards request.apiKeys.openrouter as OPENROUTER_API_KEY env var", async () => {
+		const sbx = makeFakeSandbox([]);
+		createMock.mockResolvedValue(sbx);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({
+				apiKeys: { openrouter: "or-test-key" },
+			}),
+		})) {
+			// consume
+		}
+
+		const callArgs = createMock.mock.calls[0][1];
+		expect(callArgs.envs).toMatchObject({
+			OPENROUTER_API_KEY: "or-test-key",
+		});
+	});
+
+	it("forwards OPENROUTER_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY from process.env", async () => {
+		const sbx = makeFakeSandbox([]);
+		createMock.mockResolvedValue(sbx);
+
+		const origOR = process.env.OPENROUTER_API_KEY;
+		const origGG = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+		process.env.OPENROUTER_API_KEY = "or-env-key";
+		process.env.GOOGLE_GENERATIVE_AI_API_KEY = "gg-env-key";
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			// consume
+		}
+
+		const callArgs = createMock.mock.calls[0][1];
+		expect(callArgs.envs).toMatchObject({
+			OPENROUTER_API_KEY: "or-env-key",
+			GOOGLE_GENERATIVE_AI_API_KEY: "gg-env-key",
+		});
+
+		// Restore
+		if (origOR !== undefined) process.env.OPENROUTER_API_KEY = origOR;
+		else delete process.env.OPENROUTER_API_KEY;
+		if (origGG !== undefined) process.env.GOOGLE_GENERATIVE_AI_API_KEY = origGG;
+		else delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+	});
+
 	it("writes agent_config.json with merged config fields", async () => {
 		const sbx = makeFakeSandbox([]);
 		createMock.mockResolvedValue(sbx);

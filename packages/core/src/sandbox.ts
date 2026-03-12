@@ -127,6 +127,9 @@ function buildEnvs(request: QueryRequest): Record<string, string> {
 		ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
 		OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
 		GOOGLE_API_KEY: process.env.GOOGLE_API_KEY ?? "",
+		GOOGLE_GENERATIVE_AI_API_KEY:
+			process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "",
+		OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ?? "",
 		E2B_API_KEY: process.env.E2B_API_KEY ?? "",
 	};
 
@@ -134,6 +137,9 @@ function buildEnvs(request: QueryRequest): Record<string, string> {
 	if (request.apiKeys) {
 		if (request.apiKeys.anthropic) {
 			keyMap.ANTHROPIC_API_KEY = request.apiKeys.anthropic;
+		}
+		if (request.apiKeys.openrouter) {
+			keyMap.OPENROUTER_API_KEY = request.apiKeys.openrouter;
 		}
 		if (request.apiKeys.e2b) {
 			keyMap.E2B_API_KEY = request.apiKeys.e2b;
