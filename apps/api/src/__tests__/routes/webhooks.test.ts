@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createApp } from "../../app.js";
 
 const WEBHOOK_SECRET = "test-webhook-secret-key-1234567890";
@@ -30,7 +30,7 @@ function postWebhook(
 const samplePayload = {
 	type: "sandbox.lifecycle.created",
 	sandboxId: "sbx-123",
-	eventData: { sandbox_metadata: { request_id: "req-456" } },
+	eventData: { sandbox_metadata: { requestId: "req-456" } },
 };
 
 describe("POST /webhooks/e2b", () => {
@@ -75,6 +75,25 @@ describe("POST /webhooks/e2b", () => {
 		});
 
 		expect(res.status).toBe(400);
+	});
+
+	test("extracts camelCase requestId from sandbox metadata", async () => {
+		const app = createApp({});
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		try {
+			const payload = {
+				type: "sandbox.lifecycle.created",
+				sandboxId: "sbx-789",
+				eventData: { sandbox_metadata: { requestId: "req-exact-match" } },
+			};
+			await postWebhook(app, payload, { noSignature: true });
+			const logCall = logSpy.mock.calls.find((args) =>
+				String(args[0]).includes("req-exact-match"),
+			);
+			expect(logCall).toBeDefined();
+		} finally {
+			logSpy.mockRestore();
+		}
 	});
 
 	test("handles sha256= prefix on signature", async () => {

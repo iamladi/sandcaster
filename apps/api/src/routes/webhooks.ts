@@ -42,7 +42,7 @@ export function registerWebhookRoutes(
 		const metadata =
 			((payload.eventData as Record<string, unknown>)
 				?.sandbox_metadata as Record<string, unknown>) ?? {};
-		const requestId = (metadata.request_id as string) ?? "unknown";
+		const requestId = (metadata.requestId as string) ?? "unknown";
 
 		console.log(
 			`[${requestId}] E2B lifecycle event: ${eventType} sandbox=${sandboxId}`,
