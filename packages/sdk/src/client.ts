@@ -46,17 +46,25 @@ export class SandcasterClient {
 				self.#activeControllers.add(controller);
 
 				// Link external signal to internal controller
+				let abortHandler: (() => void) | null = null;
 				if (options?.signal) {
 					if (options.signal.aborted) {
 						controller.abort(options.signal.reason);
 					} else {
-						options.signal.addEventListener(
-							"abort",
-							() => controller.abort(options.signal?.reason),
-							{ once: true },
-						);
+						abortHandler = () => controller.abort(options.signal?.reason);
+						options.signal.addEventListener("abort", abortHandler, {
+							once: true,
+						});
 					}
 				}
+
+				const cleanup = () => {
+					self.#activeControllers.delete(controller);
+					if (abortHandler) {
+						options?.signal?.removeEventListener("abort", abortHandler);
+						abortHandler = null;
+					}
+				};
 
 				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
 					null;
@@ -95,18 +103,18 @@ export class SandcasterClient {
 							const gen = await ensureGenerator();
 							const result = await gen.next();
 							if (result.done) {
-								self.#activeControllers.delete(controller);
+								cleanup();
 							}
 							return result;
 						} catch (error) {
-							self.#activeControllers.delete(controller);
+							cleanup();
 							throw error;
 						}
 					},
 					async return(
 						value?: unknown,
 					): Promise<IteratorResult<SandcasterEvent>> {
-						self.#activeControllers.delete(controller);
+						cleanup();
 						if (generatorPromise) {
 							try {
 								const gen = await generatorPromise;
@@ -121,10 +129,14 @@ export class SandcasterClient {
 					async throw(
 						error?: unknown,
 					): Promise<IteratorResult<SandcasterEvent>> {
-						self.#activeControllers.delete(controller);
+						cleanup();
 						if (generatorPromise) {
-							const gen = await generatorPromise;
-							return gen.throw(error);
+							try {
+								const gen = await generatorPromise;
+								return gen.throw(error);
+							} catch {
+								// generatorPromise rejected; fall through to re-throw caller's error
+							}
 						}
 						throw error;
 					},
