@@ -37,7 +37,7 @@ export async function executeServe(
 	args: ServeArgs,
 	deps: ServeDeps,
 ): Promise<void> {
-	const _config = deps.loadConfig();
+	deps.loadConfig();
 
 	const apiKey = process.env.SANDCASTER_API_KEY;
 	const webhookSecret =

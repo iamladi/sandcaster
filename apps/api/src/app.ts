@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { requestId } from "hono/request-id";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createCorsMiddleware } from "./middleware/cors.js";
-import { requestIdMiddleware } from "./middleware/request-id.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerQueryRoutes } from "./routes/query.js";
 import { registerRunsRoutes } from "./routes/runs.js";
@@ -12,8 +13,11 @@ export function createApp(deps: AppDeps): Hono {
 	const app = new Hono();
 	const version = deps.version ?? "0.0.0";
 
-	// Middleware
-	app.use("*", requestIdMiddleware());
+	// Middleware — always generate a fresh ID, ignore client-supplied headers
+	app.use(
+		"*",
+		requestId({ headerName: "X-Request-ID", generator: () => randomUUID() }),
+	);
 	if (deps.corsOrigins) {
 		app.use("*", createCorsMiddleware(deps.corsOrigins));
 	}

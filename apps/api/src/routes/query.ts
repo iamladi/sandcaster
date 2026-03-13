@@ -34,7 +34,7 @@ export function registerQueryRoutes(
 		const config = loadConfig() ?? undefined;
 
 		// Create run in store
-		const _run = opts.runStore?.create(
+		opts.runStore?.create(
 			requestId,
 			request.prompt,
 			request.model ?? null,
