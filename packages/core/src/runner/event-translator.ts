@@ -24,7 +24,7 @@ export type SandcasterEvent =
 			numTurns?: number;
 			model?: string;
 	  }
-	| { type: "error"; content: string; code?: string };
+	| { type: "error"; content: string; code?: string; hint?: string };
 
 // ---------------------------------------------------------------------------
 // createEventTranslator

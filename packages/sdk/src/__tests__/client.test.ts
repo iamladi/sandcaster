@@ -354,12 +354,10 @@ describe("SandcasterClient", () => {
 	describe("dispose (Symbol.asyncDispose)", () => {
 		it("aborts in-flight query() streams on dispose", async () => {
 			// Use a stream that never ends — we dispose before it finishes
-			let _streamController: ReadableStreamDefaultController<Uint8Array>;
 			const encoder = new TextEncoder();
 
 			const body = new ReadableStream<Uint8Array>({
 				start(controller) {
-					_streamController = controller;
 					// Emit one event then pause
 					controller.enqueue(
 						encoder.encode(
