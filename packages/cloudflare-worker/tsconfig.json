@@ -1,0 +1,9 @@
+{
+	"extends": "@sandcaster/ts-config/node.json",
+	"compilerOptions": {
+		"outDir": "dist",
+		"rootDir": "src",
+		"types": ["@cloudflare/workers-types"]
+	},
+	"include": ["src"]
+}

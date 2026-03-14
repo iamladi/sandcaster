@@ -1,0 +1,10 @@
+name = "sandcaster-sandbox-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[durable_objects]
+bindings = [{name = "SANDBOX", class_name = "SandboxObject"}]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SandboxObject"]

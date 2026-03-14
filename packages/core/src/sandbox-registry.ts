@@ -102,7 +102,7 @@ export function resetRegistry(): void {
 // Built-in provider registrations (lazy dynamic import)
 // ---------------------------------------------------------------------------
 
-function stubProvider(name: SandboxProviderName): SandboxProvider {
+function _stubProvider(name: SandboxProviderName): SandboxProvider {
 	return {
 		name,
 		create: async (_config: SandboxProviderConfig): Promise<CreateResult> => ({
@@ -133,9 +133,10 @@ function registerBuiltInProviders(): void {
 	});
 
 	registerSandboxProvider("cloudflare", async () => {
-		const pkg = "@cloudflare/workers-sandbox";
-		await import(pkg);
-		return stubProvider("cloudflare");
+		const { createCloudflareProvider } = await import(
+			"./providers/cloudflare.js"
+		);
+		return createCloudflareProvider();
 	});
 }
 
