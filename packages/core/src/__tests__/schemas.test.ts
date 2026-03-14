@@ -151,6 +151,33 @@ describe("QueryRequestSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	it("accepts all valid sandboxProvider values", () => {
+		const sandboxProviders = ["e2b", "vercel", "docker", "cloudflare"] as const;
+		for (const sandboxProvider of sandboxProviders) {
+			const result = QueryRequestSchema.safeParse({
+				prompt: "test",
+				sandboxProvider,
+			});
+			expect(result.success).toBe(true);
+		}
+	});
+
+	it("rejects an invalid sandboxProvider value", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			sandboxProvider: "unknown-sandbox",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("accepts vercel and cloudflare apiKeys", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			apiKeys: { vercel: "v-tok", cloudflare: "cf-tok" },
+		});
+		expect(result.success).toBe(true);
+	});
+
 	it("rejects maxTurns of 0", () => {
 		const result = QueryRequestSchema.safeParse({
 			prompt: "test",
@@ -234,6 +261,21 @@ describe("SandcasterConfigSchema", () => {
 			thinkingLevel: "high",
 		});
 		expect(result.success).toBe(true);
+	});
+
+	it("accepts all valid sandboxProvider values", () => {
+		const sandboxProviders = ["e2b", "vercel", "docker", "cloudflare"] as const;
+		for (const sandboxProvider of sandboxProviders) {
+			const result = SandcasterConfigSchema.safeParse({ sandboxProvider });
+			expect(result.success).toBe(true);
+		}
+	});
+
+	it("rejects an invalid sandboxProvider value", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			sandboxProvider: "unknown-sandbox",
+		});
+		expect(result.success).toBe(false);
 	});
 });
 
