@@ -1,7 +1,7 @@
 ---
 title: "Multi-provider sandbox architecture"
 type: Refactor
-issue: null
+issue: 4
 research: ["research/research-multi-provider-sandbox-architecture.md"]
 status: Ready for Implementation
 reviewed: true
