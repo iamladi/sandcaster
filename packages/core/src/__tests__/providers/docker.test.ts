@@ -21,6 +21,14 @@ import { createDockerProvider } from "../../providers/docker.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
+type MockCall = [string, string[], Record<string, unknown>?];
+
+function _callsFor(cmd: string): MockCall[] {
+	return (mockExeca.mock.calls as MockCall[]).filter(
+		([, args]) => args[0] === cmd,
+	);
+}
+
 /**
  * Build a minimal execa result object for a successful docker command.
  */
@@ -119,9 +127,7 @@ describe("createDockerProvider", () => {
 		const provider = createDockerProvider();
 		await provider.create({ template: "node:20" });
 
-		const psCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "ps",
-		);
+		const psCalls = _callsFor("ps");
 		expect(psCalls.length).toBeGreaterThanOrEqual(1);
 
 		// Verify docker ps was called with label filter
@@ -130,9 +136,7 @@ describe("createDockerProvider", () => {
 		expect(psCall[1]).toContain("label=sandcaster=true");
 
 		// Verify docker rm -f was called for each orphan
-		const rmCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "rm",
-		);
+		const rmCalls = _callsFor("rm");
 		expect(rmCalls.length).toBeGreaterThanOrEqual(2);
 	});
 
@@ -142,9 +146,7 @@ describe("createDockerProvider", () => {
 		const provider = createDockerProvider();
 		await provider.create({ template: "node:20" });
 
-		const rmCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "rm",
-		);
+		const rmCalls = _callsFor("rm");
 		expect(rmCalls).toHaveLength(0);
 	});
 
@@ -201,9 +203,7 @@ describe("createDockerProvider", () => {
 		const provider = createDockerProvider();
 		await provider.create({ template: "node:20" });
 
-		const runCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "run",
-		);
+		const runCalls = _callsFor("run");
 		expect(runCalls).toHaveLength(1);
 		const runArgs: string[] = runCalls[0][1];
 		expect(runArgs).toContain("--rm");
@@ -218,9 +218,7 @@ describe("createDockerProvider", () => {
 		const provider = createDockerProvider();
 		await provider.create({ template: "my-registry/image:v1" });
 
-		const runCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "run",
-		);
+		const runCalls = _callsFor("run");
 		const runArgs: string[] = runCalls[0][1];
 		expect(runArgs).toContain("my-registry/image:v1");
 	});
@@ -234,9 +232,7 @@ describe("createDockerProvider", () => {
 			envs: { FOO: "bar", BAZ: "qux" },
 		});
 
-		const runCalls = mockExeca.mock.calls.filter(
-			([, args]: [string, string[]]) => args[0] === "run",
-		);
+		const runCalls = _callsFor("run");
 		const runArgs: string[] = runCalls[0][1];
 
 		// Find --env pairs

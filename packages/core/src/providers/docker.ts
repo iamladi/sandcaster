@@ -192,7 +192,7 @@ export function createDockerProvider(): SandboxProvider {
 						if (timedOut) {
 							return {
 								stdout: result.stdout ?? "",
-								stderr: "Command timed out",
+								stderr: "Command timeout: exceeded time limit",
 								exitCode: -1,
 							};
 						}
