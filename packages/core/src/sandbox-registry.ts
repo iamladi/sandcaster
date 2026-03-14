@@ -127,7 +127,8 @@ function registerBuiltInProviders(): void {
 	});
 
 	registerSandboxProvider("docker", async () => {
-		return stubProvider("docker");
+		const { createDockerProvider } = await import("./providers/docker.js");
+		return createDockerProvider();
 	});
 
 	registerSandboxProvider("cloudflare", async () => {
