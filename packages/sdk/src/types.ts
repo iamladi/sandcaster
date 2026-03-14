@@ -86,7 +86,13 @@ export type SandcasterEventType = SandcasterEvent["type"];
 
 export interface QueryRequest {
 	prompt: string;
-	apiKeys?: { anthropic?: string; e2b?: string; openrouter?: string };
+	apiKeys?: {
+		anthropic?: string;
+		e2b?: string;
+		openrouter?: string;
+		vercel?: string;
+		cloudflare?: string;
+	};
 	model?: string;
 	maxTurns?: number;
 	outputFormat?: Record<string, unknown>;
@@ -99,6 +105,7 @@ export interface QueryRequest {
 	extraSkills?: Record<string, string>;
 	provider?: "anthropic" | "vertex" | "bedrock" | "openrouter";
 	thinkingLevel?: "none" | "low" | "medium" | "high";
+	sandboxProvider?: "e2b" | "vercel" | "docker" | "cloudflare";
 }
 
 // ---------------------------------------------------------------------------
