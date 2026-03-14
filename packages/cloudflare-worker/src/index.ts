@@ -34,7 +34,7 @@ app.post("/sandbox/create", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/sandbox/:id/files/write", authMiddleware, async (c) => {
-	const sessionId = c.req.param("id");
+	const sessionId = c.req.param("id") ?? "";
 	const { path, content } = (await c.req.json()) as {
 		path: string;
 		content: string;
@@ -51,7 +51,7 @@ app.post("/sandbox/:id/files/write", authMiddleware, async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/sandbox/:id/files/read", authMiddleware, async (c) => {
-	const sessionId = c.req.param("id");
+	const sessionId = c.req.param("id") ?? "";
 	const path = c.req.query("path") ?? "";
 
 	const content = readFile(sessionId, path) ?? "";
@@ -66,7 +66,7 @@ app.get("/sandbox/:id/files/read", authMiddleware, async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/sandbox/:id/exec", authMiddleware, async (c) => {
-	const sessionId = c.req.param("id");
+	const sessionId = c.req.param("id") ?? "";
 	const { cmd, timeoutMs } = (await c.req.json()) as {
 		cmd: string;
 		timeoutMs?: number;
@@ -83,7 +83,7 @@ app.post("/sandbox/:id/exec", authMiddleware, async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/sandbox/:id/kill", authMiddleware, async (c) => {
-	const sessionId = c.req.param("id");
+	const sessionId = c.req.param("id") ?? "";
 
 	deleteSession(sessionId);
 

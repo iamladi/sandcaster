@@ -1,9 +1,7 @@
 import {
-	type CreateResult,
 	SANDBOX_PROVIDER_NAMES,
 	type SandboxErrorCode,
 	type SandboxProvider,
-	type SandboxProviderConfig,
 	type SandboxProviderName,
 } from "./sandbox-provider.js";
 
@@ -101,17 +99,6 @@ export function resetRegistry(): void {
 // ---------------------------------------------------------------------------
 // Built-in provider registrations (lazy dynamic import)
 // ---------------------------------------------------------------------------
-
-function _stubProvider(name: SandboxProviderName): SandboxProvider {
-	return {
-		name,
-		create: async (_config: SandboxProviderConfig): Promise<CreateResult> => ({
-			ok: false,
-			code: "SANDBOX_ERROR",
-			message: `${name} provider adapter not yet implemented`,
-		}),
-	};
-}
 
 function registerBuiltInProviders(): void {
 	registerSandboxProvider("e2b", async () => {

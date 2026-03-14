@@ -8,7 +8,7 @@ import { validateToken } from "./sandbox-object.js";
 export async function authMiddleware(
 	c: Context,
 	next: Next,
-): Promise<Response | undefined> {
+): Promise<globalThis.Response | undefined> {
 	const sessionId = c.req.param("id");
 	const authHeader = c.req.header("Authorization");
 
