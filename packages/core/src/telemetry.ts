@@ -62,7 +62,6 @@ let _agentExecutionDuration: unknown = null;
 let _activeSandboxes: unknown = null;
 let _errorCounter: unknown = null;
 let _queueDropCounter: unknown = null;
-let _webhookEventCounter: unknown = null;
 
 function _isEnabled(): boolean {
 	return process.env.SANDCASTER_TELEMETRY?.trim() === "1";
@@ -269,15 +268,6 @@ export async function initTelemetry(): Promise<void> {
 		unit: "1",
 		description: "Messages dropped due to full queue",
 	});
-	// biome-ignore lint/suspicious/noExplicitAny: OTel meter API
-	_webhookEventCounter = (meter as any).createCounter(
-		"sandcaster.webhook.events",
-		{
-			unit: "1",
-			description: "E2B webhook events received",
-		},
-	);
-
 	_enabled = true;
 	_tracer = otelCore.trace.getTracer("sandcaster");
 	console.info(`OpenTelemetry initialized (protocol=${protocol})`);
@@ -366,14 +356,5 @@ export function recordQueueDrop(): void {
 	if (_queueDropCounter) {
 		// biome-ignore lint/suspicious/noExplicitAny: OTel counter API
 		(_queueDropCounter as any).add(1);
-	}
-}
-
-export function recordWebhookEvent(opts?: { eventType?: string }): void {
-	if (_webhookEventCounter) {
-		// biome-ignore lint/suspicious/noExplicitAny: OTel counter API
-		(_webhookEventCounter as any).add(1, {
-			"sandcaster.webhook.event_type": opts?.eventType ?? "",
-		});
 	}
 }

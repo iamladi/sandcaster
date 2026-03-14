@@ -228,20 +228,6 @@ describe("SandcasterConfigSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
-	it("accepts a valid webhookUrl", () => {
-		const result = SandcasterConfigSchema.safeParse({
-			webhookUrl: "https://example.com/webhook",
-		});
-		expect(result.success).toBe(true);
-	});
-
-	it("rejects an invalid webhookUrl", () => {
-		const result = SandcasterConfigSchema.safeParse({
-			webhookUrl: "not-a-url",
-		});
-		expect(result.success).toBe(false);
-	});
-
 	it("accepts valid provider and thinkingLevel", () => {
 		const result = SandcasterConfigSchema.safeParse({
 			provider: "vertex",

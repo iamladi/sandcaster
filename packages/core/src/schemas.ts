@@ -182,7 +182,6 @@ export const SandcasterConfigSchema = z.object({
 	skillsDir: z.string().optional(),
 	allowedTools: z.array(z.string()).optional(),
 	templateSkills: z.boolean().optional(),
-	webhookUrl: z.url().optional(),
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
 });

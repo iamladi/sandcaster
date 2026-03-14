@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import type { RunOptions, SandcasterEvent } from "@sandcaster/core";
 import { createRunStore } from "@sandcaster/core";
 import { describe, expect, test } from "vitest";
@@ -19,7 +18,6 @@ async function* fakeRunAgent(
 }
 
 const API_KEY = "test-api-key-that-is-32-chars-ok";
-const WEBHOOK_SECRET = "webhook-secret-for-integration-test";
 
 function createTestApp() {
 	return createApp({
@@ -28,7 +26,6 @@ function createTestApp() {
 			path: `/tmp/sandcaster-integration-${crypto.randomUUID()}.jsonl`,
 		}),
 		apiKey: API_KEY,
-		webhookSecret: WEBHOOK_SECRET,
 		version: "0.1.0",
 		corsOrigins: ["http://localhost:3000"],
 	});
@@ -80,28 +77,5 @@ describe("integration: full request lifecycle", () => {
 		const runs = await runsRes.json();
 		expect(runs).toHaveLength(1);
 		expect(runs[0].status).toBe("completed");
-	});
-
-	test("webhook verifies HMAC and logs event", async () => {
-		const app = createTestApp();
-		const body = JSON.stringify({
-			type: "sandbox.lifecycle.created",
-			sandboxId: "sbx-test",
-		});
-		const signature = createHmac("sha256", WEBHOOK_SECRET)
-			.update(body)
-			.digest("hex");
-
-		const res = await app.request("/webhooks/e2b", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"e2b-signature": signature,
-			},
-			body,
-		});
-
-		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ status: "ok" });
 	});
 });
