@@ -122,8 +122,9 @@ function registerBuiltInProviders(): void {
 
 	registerSandboxProvider("vercel", async () => {
 		const pkg = "@vercel/sandbox";
-		await import(pkg);
-		return stubProvider("vercel");
+		await import(pkg); // verify SDK available
+		const { createVercelProvider } = await import("./providers/vercel.js");
+		return createVercelProvider();
 	});
 
 	registerSandboxProvider("docker", async () => {

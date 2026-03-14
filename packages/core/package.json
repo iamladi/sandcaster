@@ -30,5 +30,8 @@
 		"vite": "^7.3.1",
 		"yaml": "^2.8.2",
 		"zod": "^4.3.6"
+	},
+	"optionalDependencies": {
+		"@vercel/sandbox": "^1.8"
 	}
 }
