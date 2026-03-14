@@ -2,14 +2,6 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import {
-	AuthenticationError,
-	TimeoutError as E2BTimeoutError,
-	NotFoundError,
-	RateLimitError,
-	Sandbox,
-	TemplateError,
-} from "e2b";
 import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
@@ -17,6 +9,12 @@ import {
 	uploadFiles,
 	uploadSkills,
 } from "./files.js";
+import type { SandboxInstance } from "./sandbox-provider.js";
+import { getSandboxProvider } from "./sandbox-registry.js";
+import {
+	resolveProviderCredential,
+	resolveSandboxProvider,
+} from "./sandbox-resolver.js";
 import type {
 	QueryRequest,
 	SandcasterConfig,
@@ -69,56 +67,7 @@ export interface RunOptions {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Classify an E2B sandbox-creation error into a SandcasterEvent with code + hint */
-function classifySandboxError(err: unknown, template: string): SandcasterEvent {
-	if (err instanceof NotFoundError) {
-		return {
-			type: "error",
-			content: `Sandbox template '${template}' not found.`,
-			code: "TEMPLATE_NOT_FOUND",
-			hint: "Run: bun run scripts/create-template.ts",
-		};
-	}
-	if (err instanceof AuthenticationError) {
-		return {
-			type: "error",
-			content: "E2B authentication failed.",
-			code: "E2B_AUTH",
-			hint: "Check your E2B_API_KEY. Get one at https://e2b.dev/dashboard",
-		};
-	}
-	if (err instanceof RateLimitError) {
-		return {
-			type: "error",
-			content: "E2B rate limit exceeded.",
-			code: "RATE_LIMIT",
-			hint: "E2B rate limit — wait and retry",
-		};
-	}
-	if (err instanceof E2BTimeoutError) {
-		return {
-			type: "error",
-			content: "Sandbox creation timed out.",
-			code: "SANDBOX_TIMEOUT",
-			hint: "Sandbox creation timed out — try again or increase timeout",
-		};
-	}
-	if (err instanceof TemplateError) {
-		return {
-			type: "error",
-			content: `Sandbox template '${template}' is incompatible.`,
-			code: "TEMPLATE_INCOMPATIBLE",
-			hint: "Template needs rebuild — run: bun run scripts/create-template.ts",
-		};
-	}
-	return {
-		type: "error",
-		content: `Failed to create sandbox: ${err instanceof Error ? err.message : String(err)}`,
-		code: "SANDBOX_ERROR",
-	};
-}
-
-/** Build the env vars to pass into the E2B sandbox */
+/** Build the env vars to pass into the sandbox */
 function buildEnvs(request: QueryRequest): Record<string, string> {
 	const envs: Record<string, string> = {};
 
@@ -193,73 +142,113 @@ function buildAgentConfig(
 // Main export
 // ---------------------------------------------------------------------------
 
-/** Run an AI agent in an E2B sandbox, yielding SandcasterEvents as they occur */
+/** Run an AI agent in a sandbox, yielding SandcasterEvents as they occur */
 export async function* runAgentInSandbox(
 	options: RunOptions,
 ): AsyncGenerator<SandcasterEvent> {
 	const { request, config, requestId } = options;
 
-	const template = process.env.SANDCASTER_TEMPLATE ?? "sandcaster-v1";
 	const timeoutSecs = request.timeout ?? config?.timeout ?? 300;
 	const timeoutMs = timeoutSecs * 1000;
-	const apiKey = request.apiKeys?.e2b ?? process.env.E2B_API_KEY;
 
 	// ------------------------------------------------------------------
-	// 0. Guard missing E2B API key
+	// 0. Resolve provider
 	// ------------------------------------------------------------------
-	if (!apiKey) {
+	const resolveResult = resolveSandboxProvider({
+		requestProvider: request.sandboxProvider,
+		configProvider: config?.sandboxProvider,
+	});
+
+	if (!resolveResult.ok) {
 		yield {
 			type: "error" as const,
-			content: "E2B API key is not set.",
-			code: "E2B_AUTH",
-			hint: "Set E2B_API_KEY in your environment or .env file. Get one at https://e2b.dev/dashboard",
+			content: resolveResult.message,
+			code: resolveResult.code,
+			hint: resolveResult.hint,
 		};
 		return;
 	}
 
+	const providerName = resolveResult.name;
+
 	// ------------------------------------------------------------------
-	// 1. Create sandbox
+	// 1. Get provider from registry
 	// ------------------------------------------------------------------
-	let sbx: Sandbox;
-	try {
-		sbx = await Sandbox.create(template, {
-			apiKey,
-			timeoutMs,
-			envs: buildEnvs(request),
-			metadata: {
-				requestId: requestId ?? "unknown",
-			},
-		});
-	} catch (err) {
-		yield classifySandboxError(err, template);
+	const providerResult = await getSandboxProvider(providerName);
+
+	if (!providerResult.ok) {
+		yield {
+			type: "error" as const,
+			content: providerResult.message,
+			code: providerResult.code,
+			hint: providerResult.hint,
+		};
 		return;
 	}
 
+	const provider = providerResult.provider;
+
+	// ------------------------------------------------------------------
+	// 2. Resolve credential for this provider
+	// ------------------------------------------------------------------
+	const apiKey = resolveProviderCredential(providerName, {
+		requestApiKeys: request.apiKeys as Record<string, string | undefined>,
+	});
+
+	// ------------------------------------------------------------------
+	// 3. Create sandbox via provider
+	// ------------------------------------------------------------------
+	const template = process.env.SANDCASTER_TEMPLATE ?? "sandcaster-v1";
+
+	const createResult = await provider.create({
+		template,
+		timeoutMs,
+		envs: buildEnvs(request),
+		metadata: {
+			requestId: requestId ?? "unknown",
+		},
+		apiKey,
+	});
+
+	if (!createResult.ok) {
+		yield {
+			type: "error" as const,
+			content: createResult.message,
+			code: createResult.code,
+			hint: createResult.hint,
+		};
+		return;
+	}
+
+	const instance: SandboxInstance = createResult.instance;
+
 	try {
 		// ------------------------------------------------------------------
-		// 2. Upload runner bundle (must live next to /opt/sandcaster/node_modules
-		//    so Node.js module resolution can find the pre-installed deps)
+		// 4. Upload runner bundle
 		// ------------------------------------------------------------------
-		await sbx.files.write("/opt/sandcaster/runner.mjs", _getRunnerBundle());
+		await instance.files.write(
+			"/opt/sandcaster/runner.mjs",
+			_getRunnerBundle(),
+		);
 
 		// ------------------------------------------------------------------
-		// 3. Upload agent config
+		// 5. Upload agent config
 		// ------------------------------------------------------------------
 		const agentConfig = buildAgentConfig(request, config);
-		await sbx.files.write(
+		await instance.files.write(
 			"/opt/sandcaster/agent_config.json",
 			JSON.stringify(agentConfig),
 		);
 
 		// ------------------------------------------------------------------
-		// 4. Upload user files
+		// 6. Upload user files
 		// ------------------------------------------------------------------
 		if (request.files && Object.keys(request.files).length > 0) {
-			await uploadFiles(sbx, request.files);
+			await uploadFiles(instance, request.files);
 		}
 
 		// ------------------------------------------------------------------
-		// 5. Upload skills
+		// 7. Upload skills
 		// ------------------------------------------------------------------
 		const extraSkills = request.extraSkills;
 		if (extraSkills && Object.keys(extraSkills).length > 0) {
@@ -267,16 +256,16 @@ export async function* runAgentInSandbox(
 				name,
 				content,
 			}));
-			await uploadSkills(sbx, skillsList);
+			await uploadSkills(instance, skillsList);
 		}
 
 		// ------------------------------------------------------------------
-		// 6. Create extraction marker
+		// 8. Create extraction marker
 		// ------------------------------------------------------------------
-		const markerPath = await createExtractionMarker(sbx, requestId ?? "");
+		const markerPath = await createExtractionMarker(instance, requestId ?? "");
 
 		// ------------------------------------------------------------------
-		// 7 & 8. Execute runner + stream events via PassThrough bridge
+		// 9. Execute runner + stream events via PassThrough bridge
 		// ------------------------------------------------------------------
 		const stream = new PassThrough({ objectMode: true });
 
@@ -292,7 +281,7 @@ export async function* runAgentInSandbox(
 		};
 
 		// Run the command — when it resolves/rejects, we end the stream
-		const runPromise = sbx.commands
+		const runPromise = instance.commands
 			.run("node /opt/sandcaster/runner.mjs", {
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
@@ -310,7 +299,7 @@ export async function* runAgentInSandbox(
 			});
 
 		// ------------------------------------------------------------------
-		// 9. Parse JSON lines and yield events
+		// 10. Parse JSON lines and yield events
 		// ------------------------------------------------------------------
 		try {
 			for await (const line of stream) {
@@ -347,11 +336,11 @@ export async function* runAgentInSandbox(
 		});
 
 		// ------------------------------------------------------------------
-		// 10. Extract generated files
+		// 11. Extract generated files
 		// ------------------------------------------------------------------
 		const inputFileNames = new Set(Object.keys(request.files ?? {}));
 		const fileEvents = await extractGeneratedFiles(
-			sbx,
+			instance,
 			inputFileNames,
 			requestId ?? "",
 			markerPath ?? "",
@@ -362,12 +351,8 @@ export async function* runAgentInSandbox(
 		}
 	} finally {
 		// ------------------------------------------------------------------
-		// 11. Kill sandbox (always)
+		// 12. Kill sandbox (always, guaranteed cleanup — FR-9)
 		// ------------------------------------------------------------------
-		try {
-			await sbx.kill();
-		} catch {
-			// Ignore kill errors — best effort cleanup
-		}
+		await instance.kill();
 	}
 }

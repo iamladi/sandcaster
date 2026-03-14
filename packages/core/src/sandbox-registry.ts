@@ -115,8 +115,9 @@ function stubProvider(name: SandboxProviderName): SandboxProvider {
 
 function registerBuiltInProviders(): void {
 	registerSandboxProvider("e2b", async () => {
-		await import("e2b");
-		return stubProvider("e2b");
+		await import("e2b"); // verify SDK available
+		const { createE2BProvider } = await import("./providers/e2b.js");
+		return createE2BProvider();
 	});
 
 	registerSandboxProvider("vercel", async () => {

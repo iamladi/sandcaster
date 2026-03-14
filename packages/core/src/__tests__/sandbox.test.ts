@@ -1,84 +1,17 @@
-import {
-	afterEach,
-	beforeEach,
-	describe,
-	expect,
-	it,
-	type MockInstance,
-	vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
-// Module-level mocks
+// Mock node:fs so the runner bundle can load
 // ---------------------------------------------------------------------------
 
-// Mock e2b at the module boundary — it is a system dependency
-// Error classes must be defined inside the factory because vi.mock is hoisted
-vi.mock("e2b", () => {
-	class NotFoundError extends Error {
-		constructor(message: string) {
-			super(message);
-			this.name = "NotFoundError";
-		}
-	}
-	class AuthenticationError extends Error {
-		constructor(message: string) {
-			super(message);
-			this.name = "AuthenticationError";
-		}
-	}
-	class RateLimitError extends Error {
-		constructor(message: string) {
-			super(message);
-			this.name = "RateLimitError";
-		}
-	}
-	class TimeoutError extends Error {
-		constructor(message: string) {
-			super(message);
-			this.name = "TimeoutError";
-		}
-	}
-	class TemplateError extends Error {
-		constructor(message: string) {
-			super(message);
-			this.name = "TemplateError";
-		}
-	}
-
-	return {
-		Sandbox: {
-			create: vi.fn(),
-		},
-		NotFoundError,
-		AuthenticationError,
-		RateLimitError,
-		TimeoutError,
-		TemplateError,
-	};
-});
-
-// Mock ./files.js — pragmatic boundary mock since files.ts may not exist yet
-vi.mock("../files.js", () => ({
-	uploadFiles: vi.fn().mockResolvedValue(undefined),
-	uploadSkills: vi.fn().mockResolvedValue(undefined),
-	createExtractionMarker: vi
-		.fn()
-		.mockResolvedValue("/tmp/sandcaster-extract-test.marker"),
-	extractGeneratedFiles: vi.fn().mockResolvedValue([]),
-}));
-
-// Mock fs.readFileSync at module level so runner bundle load succeeds
 vi.mock("node:fs", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("node:fs")>();
 	return {
 		...actual,
 		readFileSync: vi.fn((path: unknown, ...args: unknown[]) => {
-			// Return a fake runner bundle for the runner path
 			if (typeof path === "string" && path.includes("runner.mjs")) {
 				return "// fake runner bundle";
 			}
-			// Fall through to real implementation for all other paths
 			return actual.readFileSync(
 				path as Parameters<typeof actual.readFileSync>[0],
 				...(args as Parameters<typeof actual.readFileSync>[1][]),
@@ -88,23 +21,30 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 // ---------------------------------------------------------------------------
+// Mock ./files.js — isolate sandbox orchestration from file helpers
+// ---------------------------------------------------------------------------
+
+vi.mock("../files.js", () => ({
+	uploadFiles: vi.fn().mockResolvedValue(undefined),
+	uploadSkills: vi.fn().mockResolvedValue(undefined),
+	createExtractionMarker: vi
+		.fn()
+		.mockResolvedValue("/tmp/sandcaster-extract-test.marker"),
+	extractGeneratedFiles: vi.fn().mockResolvedValue([]),
+}));
+
+// ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import {
-	AuthenticationError,
-	TimeoutError as E2BTimeoutError,
-	NotFoundError,
-	RateLimitError,
-	Sandbox,
-	TemplateError,
-} from "e2b";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
 	uploadFiles,
 } from "../files.js";
 import { runAgentInSandbox, SandboxError } from "../sandbox.js";
+import type { SandboxInstance, SandboxProvider } from "../sandbox-provider.js";
+import { registerSandboxProvider, resetRegistry } from "../sandbox-registry.js";
 import type { QueryRequest } from "../schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -120,50 +60,84 @@ function makeRequest(overrides: Partial<QueryRequest> = {}): QueryRequest {
 }
 
 /**
- * Build a fake E2B sandbox whose `commands.run` streams the given lines and
- * then resolves. Returns the mock sandbox object.
+ * Build a fake SandboxInstance whose commands.run streams the given lines.
  */
-function makeFakeSandbox(stdoutLines: string[] = []) {
-	const sbx = {
+function makeFakeInstance(stdoutLines: string[] = []): SandboxInstance & {
+	files: { write: ReturnType<typeof vi.fn> };
+	commands: { run: ReturnType<typeof vi.fn> };
+	kill: ReturnType<typeof vi.fn>;
+} {
+	return {
+		workDir: "/home/user",
+		capabilities: {
+			fileSystem: true,
+			shellExec: true,
+			envInjection: true,
+			streaming: true,
+			networkPolicy: false,
+			snapshots: false,
+			reconnect: true,
+			customImage: true,
+		},
 		files: {
 			write: vi.fn().mockResolvedValue(undefined),
+			read: vi.fn().mockResolvedValue(""),
 		},
 		commands: {
 			run: vi.fn().mockImplementation(
 				async (
 					_cmd: string,
-					opts: {
+					opts?: {
 						onStdout?: (data: string) => void;
 						onStderr?: (data: string) => void;
 					},
 				) => {
-					// Simulate async delivery of stdout lines (with \n like real E2B)
 					for (const line of stdoutLines) {
 						opts?.onStdout?.(`${line}\n`);
 					}
-					return { exitCode: 0 };
+					return { stdout: "", stderr: "", exitCode: 0 };
 				},
 			),
 		},
 		kill: vi.fn().mockResolvedValue(undefined),
 	};
-	return sbx;
+}
+
+/**
+ * Register a fake provider for "e2b" that returns the given instance.
+ * Calling create() resolves to { ok: true, instance }.
+ */
+function registerFakeProvider(
+	instance: SandboxInstance,
+	opts?: {
+		createResult?: Awaited<ReturnType<SandboxProvider["create"]>>;
+		captureConfig?: (cfg: Parameters<SandboxProvider["create"]>[0]) => void;
+	},
+): void {
+	registerSandboxProvider("e2b", async () => ({
+		name: "e2b" as const,
+		create: async (cfg) => {
+			opts?.captureConfig?.(cfg);
+			if (opts?.createResult !== undefined) {
+				return opts.createResult;
+			}
+			return { ok: true as const, instance };
+		},
+	}));
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Test suite
 // ---------------------------------------------------------------------------
 
 describe("runAgentInSandbox", () => {
-	let createMock: MockInstance;
-
 	let savedE2bKey: string | undefined;
 
 	beforeEach(() => {
+		// Reset registry state so our fake provider is fresh
+		resetRegistry();
 		savedE2bKey = process.env.E2B_API_KEY;
 		process.env.E2B_API_KEY = "test-e2b-key";
-		createMock = vi.mocked(Sandbox.create);
-		vi.clearAllMocks();
 	});
 
 	afterEach(() => {
@@ -180,37 +154,36 @@ describe("runAgentInSandbox", () => {
 	// -------------------------------------------------------------------------
 
 	it("creates sandbox, uploads, runs runner, and kills sandbox", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
 			events.push(event);
 		}
 
-		// Sandbox was created
-		expect(createMock).toHaveBeenCalledOnce();
-
-		// Runner file was uploaded (must be next to /opt/sandcaster/node_modules)
-		expect(sbx.files.write).toHaveBeenCalledWith(
+		// Runner file was uploaded
+		expect(instance.files.write).toHaveBeenCalledWith(
 			"/opt/sandcaster/runner.mjs",
 			expect.any(String),
 		);
 
-		// Config was uploaded
-		expect(sbx.files.write).toHaveBeenCalledWith(
+		// Agent config was uploaded
+		expect(instance.files.write).toHaveBeenCalledWith(
 			"/opt/sandcaster/agent_config.json",
 			expect.any(String),
 		);
 
 		// Runner was executed
-		expect(sbx.commands.run).toHaveBeenCalledWith(
+		expect(instance.commands.run).toHaveBeenCalledWith(
 			"node /opt/sandcaster/runner.mjs",
 			expect.any(Object),
 		);
 
 		// Sandbox was killed
-		expect(sbx.kill).toHaveBeenCalledOnce();
+		expect(instance.kill).toHaveBeenCalledOnce();
 	});
 
 	// -------------------------------------------------------------------------
@@ -220,18 +193,17 @@ describe("runAgentInSandbox", () => {
 	it("yields parsed JSON events from stdout", async () => {
 		const event1 = { type: "system", content: "starting" };
 		const event2 = { type: "assistant", content: "hello" };
-		const sbx = makeFakeSandbox([
+		const instance = makeFakeInstance([
 			JSON.stringify(event1),
 			JSON.stringify(event2),
 		]);
-		createMock.mockResolvedValue(sbx);
+		registerFakeProvider(instance);
 
 		const events = [];
 		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
 			events.push(event);
 		}
 
-		// Should contain the two parsed events (may also include file events)
 		const systemEvent = events.find((e) => e.type === "system");
 		const assistantEvent = events.find((e) => e.type === "assistant");
 		expect(systemEvent).toMatchObject({ type: "system", content: "starting" });
@@ -241,12 +213,12 @@ describe("runAgentInSandbox", () => {
 		});
 	});
 
-	it("yields a warning event for invalid JSON lines (graceful degradation)", async () => {
-		const sbx = makeFakeSandbox([
+	it("yields a warning event for invalid JSON lines", async () => {
+		const instance = makeFakeInstance([
 			"not-valid-json",
 			JSON.stringify({ type: "result", content: "done" }),
 		]);
-		createMock.mockResolvedValue(sbx);
+		registerFakeProvider(instance);
 
 		const events = [];
 		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
@@ -263,9 +235,9 @@ describe("runAgentInSandbox", () => {
 	// -------------------------------------------------------------------------
 
 	it("kills sandbox in finally block even when runner throws", async () => {
-		const sbx = makeFakeSandbox([]);
-		sbx.commands.run.mockRejectedValue(new Error("runner crashed"));
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		instance.commands.run.mockRejectedValue(new Error("runner crashed"));
+		registerFakeProvider(instance);
 
 		const events = [];
 		try {
@@ -275,34 +247,69 @@ describe("runAgentInSandbox", () => {
 				events.push(event);
 			}
 		} catch {
-			// expected to throw or yield error event
+			// may throw or yield error event
 		}
 
-		expect(sbx.kill).toHaveBeenCalledOnce();
+		expect(instance.kill).toHaveBeenCalledOnce();
+	});
+
+	it("does not call kill when provider.create() fails", async () => {
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance, {
+			createResult: {
+				ok: false,
+				code: "PROVIDER_AUTH_MISSING",
+				message: "Auth failed",
+				hint: "check your key",
+			},
+		});
+
+		const events = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			events.push(event);
+		}
+
+		// kill should NOT have been called since create() failed
+		expect(instance.kill).not.toHaveBeenCalled();
 	});
 
 	// -------------------------------------------------------------------------
-	// Error handling
+	// Error handling from provider.create()
 	// -------------------------------------------------------------------------
 
-	it("yields error event with code and hint when sandbox creation fails", async () => {
-		createMock.mockRejectedValue(new Error("network error"));
+	it("yields error event when provider.create() returns ok: false", async () => {
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance, {
+			createResult: {
+				ok: false,
+				code: "TEMPLATE_NOT_FOUND",
+				message: "Template not found",
+				hint: "rebuild the template",
+			},
+		});
 
 		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
 			events.push(event);
 		}
 
 		const errorEvent = events.find((e) => e.type === "error");
 		expect(errorEvent).toBeDefined();
-		expect(errorEvent?.type).toBe("error");
-		expect(errorEvent).toHaveProperty("code");
+		expect(errorEvent).toMatchObject({
+			type: "error",
+			code: "TEMPLATE_NOT_FOUND",
+		});
+		expect(errorEvent).toHaveProperty("hint");
 	});
 
-	it("yields error event when runner crashes (non-creation failure)", async () => {
-		const sbx = makeFakeSandbox([]);
-		sbx.commands.run.mockRejectedValue(new Error("OOM"));
-		createMock.mockResolvedValue(sbx);
+	it("yields error event when runner crashes", async () => {
+		const instance = makeFakeInstance([]);
+		instance.commands.run.mockRejectedValue(new Error("OOM"));
+		registerFakeProvider(instance);
 
 		const events = [];
 		try {
@@ -315,19 +322,61 @@ describe("runAgentInSandbox", () => {
 			// may throw after yielding error event
 		}
 
-		// Either an error event was yielded or a SandboxError thrown — both are valid outcomes
-		// The requirement is that kill() is called (tested above)
-		// and that the sandbox doesn't silently succeed
-		expect(sbx.kill).toHaveBeenCalled();
+		expect(instance.kill).toHaveBeenCalled();
 	});
 
 	// -------------------------------------------------------------------------
-	// Configuration
+	// Provider resolution error
 	// -------------------------------------------------------------------------
 
-	it("passes request timeout as timeoutMs to sandbox create", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+	it("yields error event when no provider can be resolved (no API key)", async () => {
+		delete process.env.E2B_API_KEY;
+		// Don't register a provider — let resolver fall back to e2b with no key
+		// The sandbox.ts should handle the missing credential case
+		// After reset, provider.create will get undefined apiKey
+
+		const instance = makeFakeInstance([]);
+		// Register a fake provider that returns auth error when no apiKey
+		registerSandboxProvider("e2b", async () => ({
+			name: "e2b" as const,
+			create: async (cfg) => {
+				if (!cfg.apiKey) {
+					return {
+						ok: false as const,
+						code: "PROVIDER_AUTH_MISSING" as const,
+						message: "E2B API key is not set.",
+						hint: "Set E2B_API_KEY in your environment",
+					};
+				}
+				return { ok: true as const, instance };
+			},
+		}));
+
+		const events = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ apiKeys: {} }),
+		})) {
+			events.push(event);
+		}
+
+		const errorEvent = events.find((e) => e.type === "error");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent?.type).toBe("error");
+		expect(errorEvent).toHaveProperty("code");
+	});
+
+	// -------------------------------------------------------------------------
+	// Configuration passing
+	// -------------------------------------------------------------------------
+
+	it("passes timeout as timeoutMs to provider.create", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest({ timeout: 600 }),
@@ -335,14 +384,17 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][1];
-		// timeout is in seconds in the request, ms in E2B API
-		expect(callArgs.timeoutMs).toBe(600 * 1000);
+		expect(capturedConfig?.timeoutMs).toBe(600 * 1000);
 	});
 
 	it("uses default timeout of 300s when request has no timeout", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest(),
@@ -350,13 +402,17 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][1];
-		expect(callArgs.timeoutMs).toBe(300 * 1000);
+		expect(capturedConfig?.timeoutMs).toBe(300 * 1000);
 	});
 
-	it("passes API keys as env vars to sandbox", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+	it("passes API keys as envs to provider.create", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest({
@@ -366,34 +422,40 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][1];
-		expect(callArgs.envs).toMatchObject({
+		expect(capturedConfig?.envs).toMatchObject({
 			ANTHROPIC_API_KEY: "sk-ant-test",
 			E2B_API_KEY: "e2b-test",
 		});
 	});
 
-	it("forwards request.apiKeys.openrouter as OPENROUTER_API_KEY env var", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+	it("forwards request.apiKeys.openrouter as OPENROUTER_API_KEY", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
 
 		for await (const _ of runAgentInSandbox({
-			request: makeRequest({
-				apiKeys: { openrouter: "or-test-key" },
-			}),
+			request: makeRequest({ apiKeys: { openrouter: "or-test-key" } }),
 		})) {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][1];
-		expect(callArgs.envs).toMatchObject({
+		expect(capturedConfig?.envs).toMatchObject({
 			OPENROUTER_API_KEY: "or-test-key",
 		});
 	});
 
-	it("forwards OPENROUTER_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY from process.env", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+	it("passes process.env API keys as envs", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
 
 		const origOR = process.env.OPENROUTER_API_KEY;
 		const origGG = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -406,13 +468,11 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const callArgs = createMock.mock.calls[0][1];
-		expect(callArgs.envs).toMatchObject({
+		expect(capturedConfig?.envs).toMatchObject({
 			OPENROUTER_API_KEY: "or-env-key",
 			GOOGLE_GENERATIVE_AI_API_KEY: "gg-env-key",
 		});
 
-		// Restore
 		if (origOR !== undefined) process.env.OPENROUTER_API_KEY = origOR;
 		else delete process.env.OPENROUTER_API_KEY;
 		if (origGG !== undefined) process.env.GOOGLE_GENERATIVE_AI_API_KEY = origGG;
@@ -420,8 +480,8 @@ describe("runAgentInSandbox", () => {
 	});
 
 	it("writes agent_config.json with merged config fields", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest({ prompt: "test prompt", maxTurns: 5 }),
@@ -429,7 +489,7 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		const configWriteCall = sbx.files.write.mock.calls.find(
+		const configWriteCall = instance.files.write.mock.calls.find(
 			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
 		) as string[];
 		expect(configWriteCall).toBeDefined();
@@ -444,8 +504,8 @@ describe("runAgentInSandbox", () => {
 	// -------------------------------------------------------------------------
 
 	it("calls uploadFiles when request has files", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest({ files: { "hello.txt": "world" } }),
@@ -454,12 +514,14 @@ describe("runAgentInSandbox", () => {
 		}
 
 		expect(uploadFiles).toHaveBeenCalledOnce();
-		expect(uploadFiles).toHaveBeenCalledWith(sbx, { "hello.txt": "world" });
+		expect(uploadFiles).toHaveBeenCalledWith(instance, {
+			"hello.txt": "world",
+		});
 	});
 
 	it("does not call uploadFiles when request has no files", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		for await (const _ of runAgentInSandbox({ request: makeRequest() })) {
 			// consume
@@ -469,8 +531,8 @@ describe("runAgentInSandbox", () => {
 	});
 
 	it("calls createExtractionMarker with the requestId", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		for await (const _ of runAgentInSandbox({
 			request: makeRequest(),
@@ -479,18 +541,47 @@ describe("runAgentInSandbox", () => {
 			// consume
 		}
 
-		expect(createExtractionMarker).toHaveBeenCalledWith(sbx, "req-abc");
+		expect(createExtractionMarker).toHaveBeenCalledWith(instance, "req-abc");
 	});
 
 	it("calls extractGeneratedFiles after runner completes", async () => {
-		const sbx = makeFakeSandbox([]);
-		createMock.mockResolvedValue(sbx);
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
 
 		for await (const _ of runAgentInSandbox({ request: makeRequest() })) {
 			// consume
 		}
 
 		expect(extractGeneratedFiles).toHaveBeenCalledOnce();
+	});
+
+	// -------------------------------------------------------------------------
+	// API key redaction
+	// -------------------------------------------------------------------------
+
+	it("does not include apiKeys values in error content when runner crashes", async () => {
+		const instance = makeFakeInstance([]);
+		instance.commands.run.mockRejectedValue(new Error("process died"));
+		registerFakeProvider(instance);
+
+		const events = [];
+		try {
+			for await (const event of runAgentInSandbox({
+				request: makeRequest({
+					apiKeys: { anthropic: "sk-ant-secret-value" },
+				}),
+			})) {
+				events.push(event);
+			}
+		} catch {
+			// may throw
+		}
+
+		// Check error events don't leak the API key value
+		const errorEvents = events.filter((e) => e.type === "error");
+		for (const event of errorEvents) {
+			expect(JSON.stringify(event)).not.toContain("sk-ant-secret-value");
+		}
 	});
 
 	// -------------------------------------------------------------------------
@@ -516,135 +607,5 @@ describe("runAgentInSandbox", () => {
 	it("SandboxError is instanceof Error", () => {
 		const err = new SandboxError("failed", "create");
 		expect(err).toBeInstanceOf(Error);
-	});
-
-	// -------------------------------------------------------------------------
-	// Error classification
-	// -------------------------------------------------------------------------
-
-	it("yields error event with E2B_AUTH code when API key is missing", async () => {
-		const originalKey = process.env.E2B_API_KEY;
-		delete process.env.E2B_API_KEY;
-
-		const events = [];
-		for await (const event of runAgentInSandbox({
-			request: makeRequest({ apiKeys: {} }),
-		})) {
-			events.push(event);
-		}
-
-		process.env.E2B_API_KEY = originalKey;
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "E2B_AUTH",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-		expect(createMock).not.toHaveBeenCalled();
-	});
-
-	it("yields error event with TEMPLATE_NOT_FOUND code for NotFoundError", async () => {
-		createMock.mockRejectedValue(new NotFoundError("template 'bad' not found"));
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "TEMPLATE_NOT_FOUND",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-	});
-
-	it("yields error event with E2B_AUTH code for AuthenticationError", async () => {
-		createMock.mockRejectedValue(new AuthenticationError("invalid api key"));
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "E2B_AUTH",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-	});
-
-	it("yields error event with RATE_LIMIT code for RateLimitError", async () => {
-		createMock.mockRejectedValue(new RateLimitError("rate limit exceeded"));
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "RATE_LIMIT",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-	});
-
-	it("yields error event with SANDBOX_TIMEOUT code for TimeoutError", async () => {
-		createMock.mockRejectedValue(
-			new E2BTimeoutError("sandbox creation timed out"),
-		);
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "SANDBOX_TIMEOUT",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-	});
-
-	it("yields error event with TEMPLATE_INCOMPATIBLE code for TemplateError", async () => {
-		createMock.mockRejectedValue(new TemplateError("template incompatible"));
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "TEMPLATE_INCOMPATIBLE",
-		});
-		expect(errorEvent).toHaveProperty("hint");
-	});
-
-	it("yields error event with SANDBOX_ERROR code for unknown errors", async () => {
-		createMock.mockRejectedValue(new Error("something unexpected"));
-
-		const events = [];
-		for await (const event of runAgentInSandbox({ request: makeRequest() })) {
-			events.push(event);
-		}
-
-		const errorEvent = events.find((e) => e.type === "error");
-		expect(errorEvent).toBeDefined();
-		expect(errorEvent).toMatchObject({
-			type: "error",
-			code: "SANDBOX_ERROR",
-		});
 	});
 });
