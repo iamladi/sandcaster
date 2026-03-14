@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import {
 	SANDBOX_PROVIDER_NAMES,
 	type SandboxErrorCode,
@@ -33,6 +34,8 @@ const AUTO_DETECT_ORDER: Array<{
 	{ provider: "cloudflare", envVar: "CLOUDFLARE_API_TOKEN" },
 ];
 
+const DOCKER_SOCKET_PATHS = ["/var/run/docker.sock", "/run/docker.sock"];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -50,6 +53,10 @@ function unknownProviderError(name: string): ResolveResult {
 	};
 }
 
+function isDockerSocketAvailable(): boolean {
+	return DOCKER_SOCKET_PATHS.some((p) => existsSync(p));
+}
+
 // ---------------------------------------------------------------------------
 // resolveSandboxProvider
 //
@@ -61,8 +68,10 @@ export function resolveSandboxProvider(opts: {
 	requestProvider?: string;
 	configProvider?: string;
 	env?: Record<string, string | undefined>;
+	checkDockerSocket?: () => boolean;
 }): ResolveResult {
 	const env = opts.env ?? process.env;
+	const checkDocker = opts.checkDockerSocket ?? isDockerSocketAvailable;
 
 	// 1. Request-level provider takes top priority
 	if (opts.requestProvider !== undefined) {
@@ -87,7 +96,11 @@ export function resolveSandboxProvider(opts: {
 		}
 	}
 
-	// 4. Default to e2b (will fail at create time without a key)
+	// 4. No cloud keys found — try Docker if available, then fall back to e2b
+	if (env.DOCKER_HOST || checkDocker()) {
+		return { ok: true, name: "docker" };
+	}
+
 	return { ok: true, name: "e2b" };
 }
 

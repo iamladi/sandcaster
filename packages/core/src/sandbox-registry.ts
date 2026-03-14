@@ -1,7 +1,9 @@
 import {
+	type CreateResult,
 	SANDBOX_PROVIDER_NAMES,
 	type SandboxErrorCode,
 	type SandboxProvider,
+	type SandboxProviderConfig,
 	type SandboxProviderName,
 } from "./sandbox-provider.js";
 
@@ -13,7 +15,7 @@ type ProviderFactory = () => Promise<SandboxProvider>;
 
 export type ProviderResult =
 	| { ok: true; provider: SandboxProvider }
-	| { ok: false; code: SandboxErrorCode; message: string; hint: string };
+	| { ok: false; code: SandboxErrorCode; message: string; hint?: string };
 
 const factories = new Map<SandboxProviderName, ProviderFactory>();
 const cache = new Map<SandboxProviderName, SandboxProvider>();
@@ -27,7 +29,6 @@ export function registerSandboxProvider(
 	factory: ProviderFactory,
 ): void {
 	factories.set(name, factory);
-	// Invalidate cache so the new factory is used on next get
 	cache.delete(name);
 }
 
@@ -47,7 +48,6 @@ export async function getSandboxProvider(
 		};
 	}
 
-	// Return from cache if available
 	const cached = cache.get(name);
 	if (cached) {
 		return { ok: true, provider: cached };
@@ -81,7 +81,7 @@ export async function getSandboxProvider(
 				ok: false,
 				code: "PROVIDER_SDK_MISSING",
 				message: `Provider SDK for "${name}" is not installed`,
-				hint: `Install the provider SDK: bun add <package>`,
+				hint: "Install the provider SDK: bun add <package>",
 			};
 		}
 		throw err;
@@ -89,63 +89,51 @@ export async function getSandboxProvider(
 }
 
 // ---------------------------------------------------------------------------
+// resetRegistry — test-only: clear all registrations and cache
+// ---------------------------------------------------------------------------
+
+export function resetRegistry(): void {
+	factories.clear();
+	cache.clear();
+	registerBuiltInProviders();
+}
+
+// ---------------------------------------------------------------------------
 // Built-in provider registrations (lazy dynamic import)
 // ---------------------------------------------------------------------------
 
-// Each factory dynamically imports the provider's SDK package.
-// If the SDK is not installed, the import throws and getSandboxProvider
-// returns { ok: false, code: "PROVIDER_SDK_MISSING" }.
-// Full provider adapters will be implemented in Phase 3.
-
-registerSandboxProvider("e2b", async () => {
-	// Verify the e2b SDK is available; full adapter implemented in Phase 3
-	await import("e2b");
+function stubProvider(name: SandboxProviderName): SandboxProvider {
 	return {
-		name: "e2b" as const,
-		create: async (_config) => ({
-			ok: false as const,
-			code: "SANDBOX_ERROR" as const,
-			message: "E2B provider adapter not yet implemented",
-			hint: "Full implementation coming in Phase 3",
+		name,
+		create: async (_config: SandboxProviderConfig): Promise<CreateResult> => ({
+			ok: false,
+			code: "SANDBOX_ERROR",
+			message: `${name} provider adapter not yet implemented`,
 		}),
 	};
-});
+}
 
-registerSandboxProvider("vercel", async () => {
-	// Verify the Vercel sandbox SDK is available; full adapter in Phase 3
-	await import("@vercel/sandbox" as string);
-	return {
-		name: "vercel" as const,
-		create: async (_config) => ({
-			ok: false as const,
-			code: "SANDBOX_ERROR" as const,
-			message: "Vercel provider adapter not yet implemented",
-		}),
-	};
-});
+function registerBuiltInProviders(): void {
+	registerSandboxProvider("e2b", async () => {
+		await import("e2b");
+		return stubProvider("e2b");
+	});
 
-registerSandboxProvider("docker", async () => {
-	// Verify dockerode is available; full adapter in Phase 3
-	await import("dockerode" as string);
-	return {
-		name: "docker" as const,
-		create: async (_config) => ({
-			ok: false as const,
-			code: "SANDBOX_ERROR" as const,
-			message: "Docker provider adapter not yet implemented",
-		}),
-	};
-});
+	registerSandboxProvider("vercel", async () => {
+		const pkg = "@vercel/sandbox";
+		await import(pkg);
+		return stubProvider("vercel");
+	});
 
-registerSandboxProvider("cloudflare", async () => {
-	// Verify the Cloudflare sandbox SDK is available; full adapter in Phase 3
-	await import("@cloudflare/workers-sandbox" as string);
-	return {
-		name: "cloudflare" as const,
-		create: async (_config) => ({
-			ok: false as const,
-			code: "SANDBOX_ERROR" as const,
-			message: "Cloudflare provider adapter not yet implemented",
-		}),
-	};
-});
+	registerSandboxProvider("docker", async () => {
+		return stubProvider("docker");
+	});
+
+	registerSandboxProvider("cloudflare", async () => {
+		const pkg = "@cloudflare/workers-sandbox";
+		await import(pkg);
+		return stubProvider("cloudflare");
+	});
+}
+
+registerBuiltInProviders();

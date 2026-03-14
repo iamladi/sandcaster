@@ -9,11 +9,15 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("resolveSandboxProvider", () => {
+	const noDocker = () => false;
+	const hasDocker = () => true;
+
 	it("request provider takes precedence over config and env", () => {
 		const result = resolveSandboxProvider({
 			requestProvider: "vercel",
 			configProvider: "docker",
 			env: { VERCEL_TOKEN: "tok", E2B_API_KEY: "key" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -25,6 +29,7 @@ describe("resolveSandboxProvider", () => {
 		const result = resolveSandboxProvider({
 			configProvider: "docker",
 			env: { E2B_API_KEY: "key" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -35,6 +40,7 @@ describe("resolveSandboxProvider", () => {
 	it("auto-detects e2b from E2B_API_KEY", () => {
 		const result = resolveSandboxProvider({
 			env: { E2B_API_KEY: "mykey" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -45,6 +51,7 @@ describe("resolveSandboxProvider", () => {
 	it("auto-detects vercel from VERCEL_TOKEN", () => {
 		const result = resolveSandboxProvider({
 			env: { VERCEL_TOKEN: "mytoken" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -55,6 +62,7 @@ describe("resolveSandboxProvider", () => {
 	it("auto-detects cloudflare from CLOUDFLARE_API_TOKEN", () => {
 		const result = resolveSandboxProvider({
 			env: { CLOUDFLARE_API_TOKEN: "mytoken" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -65,6 +73,7 @@ describe("resolveSandboxProvider", () => {
 	it("e2b takes priority when both E2B_API_KEY and VERCEL_TOKEN are present", () => {
 		const result = resolveSandboxProvider({
 			env: { E2B_API_KEY: "key", VERCEL_TOKEN: "tok" },
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
@@ -72,8 +81,33 @@ describe("resolveSandboxProvider", () => {
 		}
 	});
 
-	it("defaults to e2b when no keys and no explicit provider", () => {
-		const result = resolveSandboxProvider({ env: {} });
+	it("falls back to docker when no cloud keys and Docker socket is available", () => {
+		const result = resolveSandboxProvider({
+			env: {},
+			checkDockerSocket: hasDocker,
+		});
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.name).toBe("docker");
+		}
+	});
+
+	it("falls back to docker when no cloud keys and DOCKER_HOST is set", () => {
+		const result = resolveSandboxProvider({
+			env: { DOCKER_HOST: "unix:///var/run/docker.sock" },
+			checkDockerSocket: noDocker,
+		});
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.name).toBe("docker");
+		}
+	});
+
+	it("defaults to e2b when no cloud keys and Docker is unavailable", () => {
+		const result = resolveSandboxProvider({
+			env: {},
+			checkDockerSocket: noDocker,
+		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
 			expect(result.name).toBe("e2b");
@@ -84,6 +118,7 @@ describe("resolveSandboxProvider", () => {
 		const result = resolveSandboxProvider({
 			requestProvider: "unknown-sandbox",
 			env: {},
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -96,6 +131,7 @@ describe("resolveSandboxProvider", () => {
 		const result = resolveSandboxProvider({
 			configProvider: "my-custom-cloud",
 			env: {},
+			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -149,12 +185,11 @@ describe("resolveProviderCredential", () => {
 		expect(cred).toBe("cftok");
 	});
 
-	it("resolves docker credential returns undefined (docker has no API key)", () => {
+	it("returns undefined for docker (no API key needed)", () => {
 		const cred = resolveProviderCredential("docker", {
 			requestApiKeys: {},
 			env: {},
 		});
-		// Docker doesn't need an API key
 		expect(cred).toBeUndefined();
 	});
 });
