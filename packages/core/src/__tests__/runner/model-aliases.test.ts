@@ -76,33 +76,26 @@ describe("resolveModel — known aliases", () => {
 		expect(result).toBe(expected);
 	});
 
-	it('resolves "gpt4" to openai gpt-4.1', () => {
-		const expected = fakeModel("openai", "gpt-4.1");
+	it('resolves "gpt5" to openai gpt-5.4', () => {
+		const expected = fakeModel("openai", "gpt-5.4");
 		mockGetModel.mockReturnValue(expected);
 
-		const result = resolveModel("gpt4");
+		const result = resolveModel("gpt5");
 
-		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-4.1");
+		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-5.4");
 		expect(result).toBe(expected);
 	});
 
-	it('resolves "gemini" to google gemini-2.5-pro', () => {
-		const expected = fakeModel("google", "gemini-2.5-pro");
+	it('resolves "gemini" to google gemini-3.1-pro-preview', () => {
+		const expected = fakeModel("google", "gemini-3.1-pro-preview");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = resolveModel("gemini");
 
-		expect(mockGetModel).toHaveBeenCalledWith("google", "gemini-2.5-pro");
-		expect(result).toBe(expected);
-	});
-
-	it('resolves "o3" to openai o3', () => {
-		const expected = fakeModel("openai", "o3");
-		mockGetModel.mockReturnValue(expected);
-
-		const result = resolveModel("o3");
-
-		expect(mockGetModel).toHaveBeenCalledWith("openai", "o3");
+		expect(mockGetModel).toHaveBeenCalledWith(
+			"google",
+			"gemini-3.1-pro-preview",
+		);
 		expect(result).toBe(expected);
 	});
 });
@@ -167,34 +160,40 @@ describe("autoDetectModel", () => {
 	});
 
 	it("picks openai when OPENAI_API_KEY is set (no anthropic key)", () => {
-		const expected = fakeModel("openai", "gpt-4.1");
+		const expected = fakeModel("openai", "gpt-5.4");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = autoDetectModel({ OPENAI_API_KEY: "sk-openai-key" });
 
-		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-4.1");
+		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-5.4");
 		expect(result).toBe(expected);
 	});
 
 	it("picks google when GOOGLE_API_KEY is set (no higher-priority keys)", () => {
-		const expected = fakeModel("google", "gemini-2.5-pro");
+		const expected = fakeModel("google", "gemini-3.1-pro-preview");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = autoDetectModel({ GOOGLE_API_KEY: "google-key" });
 
-		expect(mockGetModel).toHaveBeenCalledWith("google", "gemini-2.5-pro");
+		expect(mockGetModel).toHaveBeenCalledWith(
+			"google",
+			"gemini-3.1-pro-preview",
+		);
 		expect(result).toBe(expected);
 	});
 
 	it("picks google when GOOGLE_GENERATIVE_AI_API_KEY is set (no higher-priority keys)", () => {
-		const expected = fakeModel("google", "gemini-2.5-pro");
+		const expected = fakeModel("google", "gemini-3.1-pro-preview");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = autoDetectModel({
 			GOOGLE_GENERATIVE_AI_API_KEY: "google-gen-key",
 		});
 
-		expect(mockGetModel).toHaveBeenCalledWith("google", "gemini-2.5-pro");
+		expect(mockGetModel).toHaveBeenCalledWith(
+			"google",
+			"gemini-3.1-pro-preview",
+		);
 		expect(result).toBe(expected);
 	});
 
@@ -225,7 +224,7 @@ describe("autoDetectModel", () => {
 	});
 
 	it("openai takes priority over google when both keys are set", () => {
-		const expected = fakeModel("openai", "gpt-4.1");
+		const expected = fakeModel("openai", "gpt-5.4");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = autoDetectModel({
@@ -233,12 +232,12 @@ describe("autoDetectModel", () => {
 			GOOGLE_API_KEY: "google-key",
 		});
 
-		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-4.1");
+		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-5.4");
 		expect(result).toBe(expected);
 	});
 
 	it("google takes priority over openrouter when both keys are set", () => {
-		const expected = fakeModel("google", "gemini-2.5-pro");
+		const expected = fakeModel("google", "gemini-3.1-pro-preview");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = autoDetectModel({
@@ -246,7 +245,10 @@ describe("autoDetectModel", () => {
 			OPENROUTER_API_KEY: "or-key",
 		});
 
-		expect(mockGetModel).toHaveBeenCalledWith("google", "gemini-2.5-pro");
+		expect(mockGetModel).toHaveBeenCalledWith(
+			"google",
+			"gemini-3.1-pro-preview",
+		);
 		expect(result).toBe(expected);
 	});
 
@@ -296,7 +298,7 @@ describe("resolveModelFromConfig", () => {
 	});
 
 	it("calls autoDetectModel when config.model is undefined", () => {
-		const expected = fakeModel("openai", "gpt-4.1");
+		const expected = fakeModel("openai", "gpt-5.4");
 		mockGetModel.mockReturnValue(expected);
 
 		const result = resolveModelFromConfig(
@@ -304,7 +306,7 @@ describe("resolveModelFromConfig", () => {
 			{ OPENAI_API_KEY: "sk-openai-key" },
 		);
 
-		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-4.1");
+		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-5.4");
 		expect(result).toBe(expected);
 	});
 });

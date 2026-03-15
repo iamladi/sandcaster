@@ -8,9 +8,8 @@ const ALIAS_MAP: Record<string, { provider: string; modelId: string }> = {
 	sonnet: { provider: "anthropic", modelId: "claude-sonnet-4-6" },
 	opus: { provider: "anthropic", modelId: "claude-opus-4-6" },
 	haiku: { provider: "anthropic", modelId: "claude-haiku-4-5" },
-	gpt4: { provider: "openai", modelId: "gpt-4.1" },
-	gemini: { provider: "google", modelId: "gemini-2.5-pro" },
-	o3: { provider: "openai", modelId: "o3" },
+	gpt5: { provider: "openai", modelId: "gpt-5.4" },
+	gemini: { provider: "google", modelId: "gemini-3.1-pro-preview" },
 };
 
 // ---------------------------------------------------------------------------
@@ -57,11 +56,11 @@ export function autoDetectModel(
 	}
 
 	if (env.OPENAI_API_KEY) {
-		return getModel("openai" as any, "gpt-4.1" as any);
+		return getModel("openai" as any, "gpt-5.4" as any);
 	}
 
 	if (env.GOOGLE_API_KEY ?? env.GOOGLE_GENERATIVE_AI_API_KEY) {
-		return getModel("google" as any, "gemini-2.5-pro" as any);
+		return getModel("google" as any, "gemini-3.1-pro-preview" as any);
 	}
 
 	if (env.OPENROUTER_API_KEY) {

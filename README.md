@@ -4,7 +4,7 @@ Open-source runtime for general-purpose AI agents in isolated sandboxes.
 
 CLI, API, TypeScript SDK, and Slack with streaming, file uploads, and config-driven behavior.
 
-Built on [Pi-mono](https://github.com/nicholasgriffintn/pi-mono) and [E2B](https://e2b.dev).
+Built on [Pi-mono](https://github.com/badlogic/pi-mono) for multi-provider LLM orchestration and pluggable sandbox backends ([E2B](https://e2b.dev), [Vercel](https://vercel.com/docs/sandbox), Docker, Cloudflare Workers).
 
 [![CI](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue.svg)](https://www.typescriptlang.org/)
@@ -26,16 +26,16 @@ $ sandcaster init research-brief
 $ cd research-brief
 $ sandcaster "Research Acme's competitors, crawl their sites and recent news, and write a one-page branded briefing PDF with sources."
 
- WEBFETCH  competitor sites, product pages, and recent coverage
- STREAM    compared launches, pricing, positioning, and buyer signals
- WRITE     briefing.pdf
- WRITE     reports/sources.md
+[tool: web_fetch]
+[tool: web_fetch]
+[tool: file_write]
+[file: briefing.pdf]
+[tool: file_write]
+[file: reports/sources.md]
 
-artifacts:
-  - briefing.pdf
-  - reports/sources.md
+Analyzed 5 competitor sites and recent coverage. Briefing and sources written.
 
- sonnet  12 turns  $0.043  38s
+✓ Completed · sonnet · 12 turns · $0.043 · 38s
 ```
 
 The point is not that an agent can answer a question. It starts from a runnable starter, gets a
@@ -101,9 +101,10 @@ Sandcaster is opinionated about the missing middle:
 
 ## Why not wire the SDK yourself?
 
-| Capability | Sandcaster | Raw SDK + E2B | DIY runner |
-|------------|-----------|---------------|------------|
+| Capability | Sandcaster | Raw SDK | DIY runner |
+|------------|-----------|---------|------------|
 | Fresh sandbox per request | Built in | Manual wiring | Manual wiring |
+| Multi-provider sandboxes (E2B, Vercel, Docker, Cloudflare) | Built in | No | Custom work |
 | Streaming SSE endpoint | Built in | Manual wiring | Custom work |
 | File uploads with path safety | Built in | Manual wiring | Custom work |
 | `sandcaster.json` config layer | Built in | No | Custom work |
@@ -116,7 +117,6 @@ Sandcaster is opinionated about the missing middle:
 | Rich terminal TUI (Ink) | Built in | No | Custom work |
 | Run history + JSONL store | Built in | No | Custom work |
 | OpenTelemetry integration | Built in | No | Custom work |
-| HMAC webhook verification | Built in | No | Custom work |
 
 ## What changed from Sandstorm
 
@@ -132,6 +132,7 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 | API framework | FastAPI | Hono |
 | Monorepo | flat | Turborepo with isolated packages |
 | Models | Anthropic only | Anthropic, OpenAI, Google, OpenRouter |
+| Sandbox providers | E2B only | E2B, Vercel, Docker, Cloudflare |
 | Sub-agents | No | Config-driven agent delegation |
 | Skills | No | SKILL.md with YAML frontmatter |
 | Thinking levels | No | none / low / medium / high |
@@ -141,14 +142,16 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 ```
 sandcaster/
 ├── packages/
-│   ├── core          @sandcaster/core — schemas, config, sandbox orchestration, runner
-│   ├── sdk           @sandcaster/sdk — standalone TypeScript client
-│   └── ts-config     @sandcaster/ts-config — shared TypeScript configs
+│   ├── core               @sandcaster/core — schemas, config, sandbox orchestration, runner
+│   │   └── providers/     E2B, Vercel, Docker, Cloudflare sandbox implementations
+│   ├── sdk                @sandcaster/sdk — standalone TypeScript client
+│   ├── cloudflare-worker  Cloudflare Worker proxy for sandbox operations
+│   └── ts-config          @sandcaster/ts-config — shared TypeScript configs
 ├── apps/
-│   ├── api           @sandcaster/api — Hono REST server (SSE streaming)
-│   ├── cli           @sandcaster/cli — Ink TUI with starters catalog
-│   └── slack-bot     @sandcaster/slack-bot — Slack integration
-└── scripts/          E2B template management
+│   ├── api                @sandcaster/api — Hono REST server (SSE streaming)
+│   ├── cli                @sandcaster/cli — Ink TUI with starters catalog
+│   └── slack-bot          @sandcaster/slack-bot — Slack integration
+└── scripts/               E2B template management
 ```
 
 ### Execution flow
@@ -158,7 +161,8 @@ sandcaster "prompt" -f report.pdf
   │
   ├─ Load sandcaster.json + .env
   ├─ Resolve model (alias or auto-detect from API keys)
-  ├─ Create E2B sandbox (template: sandcaster-v1)
+  ├─ Resolve sandbox provider (config > env auto-detect > docker > e2b)
+  ├─ Create sandbox (E2B / Vercel / Docker / Cloudflare)
   ├─ Upload runner, config, user files, skills
   ├─ Execute: node /opt/sandcaster/runner.mjs
   ├─ Stream JSON-line events → TUI / SSE
@@ -175,12 +179,32 @@ Set a model alias in `sandcaster.json` or pass `--model`:
 | `sonnet` | `claude-sonnet-4-6` |
 | `opus` | `claude-opus-4-6` |
 | `haiku` | `claude-haiku-4-5` |
-| `gpt4` | `gpt-4.1` |
-| `gemini` | `gemini-2.5-pro` |
-| `o3` | `o3` |
+| `gpt5` | `gpt-5.4` |
+| `gemini` | `gemini-3.1-pro-preview` |
 
 If no model is specified, Sandcaster auto-detects from your API keys:
 `ANTHROPIC_API_KEY` > `OPENAI_API_KEY` > `GOOGLE_API_KEY` > `OPENROUTER_API_KEY`
+
+You can also pass any full model ID directly (e.g. `--model claude-opus-4-6`).
+
+## Sandbox providers
+
+Sandcaster supports multiple sandbox backends. Set `sandboxProvider` in `sandcaster.json` or let Sandcaster auto-detect from your environment:
+
+| Provider | Env var | Use case |
+|----------|---------|----------|
+| `e2b` | `E2B_API_KEY` | Cloud sandbox with custom templates, streaming, reconnect |
+| `vercel` | `VERCEL_TOKEN` | Vercel Sandbox with snapshot support and streaming |
+| `docker` | Local daemon or `DOCKER_HOST` | Local development, no cloud account needed |
+| `cloudflare` | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_SANDBOX_WORKER_URL` | Edge-based sandbox via Cloudflare Workers |
+
+Auto-detection priority: `E2B_API_KEY` > `VERCEL_TOKEN` > Cloudflare env vars > Docker socket > E2B (fallback).
+
+```json
+{
+  "sandboxProvider": "docker"
+}
+```
 
 ## SDK
 
@@ -214,7 +238,6 @@ sandcaster serve --port 8000
 | `GET` | `/health` | Status and version |
 | `POST` | `/query` | Stream agent execution as SSE |
 | `GET` | `/runs` | List recent runs (limit: 1-200) |
-| `POST` | `/webhooks/e2b` | E2B lifecycle webhook (HMAC verified) |
 
 ## Configuration
 
@@ -238,6 +261,7 @@ sandcaster serve --port 8000
     }
   },
   "provider": "anthropic",
+  "sandboxProvider": "e2b",
   "thinkingLevel": "medium"
 }
 ```

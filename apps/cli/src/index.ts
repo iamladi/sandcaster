@@ -22,7 +22,7 @@ const knownSubcommands = new Set(["query", "serve", "init", "templates"]);
 const main = defineCommand({
 	meta: {
 		name: "sandcaster",
-		description: "Run AI agents in E2B sandboxes",
+		description: "Run AI agents in isolated sandboxes",
 	},
 	subCommands: {
 		query: queryCommand,
