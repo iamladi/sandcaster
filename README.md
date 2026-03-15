@@ -133,8 +133,6 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 | Monorepo | flat | Turborepo with isolated packages |
 | Models | Anthropic only | Anthropic, OpenAI, Google, OpenRouter |
 | Sandbox providers | E2B only | E2B, Vercel, Docker, Cloudflare |
-| Sub-agents | No | Config-driven agent delegation |
-| Skills | No | SKILL.md with YAML frontmatter |
 | Thinking levels | No | none / low / medium / high |
 
 ## Architecture
