@@ -277,6 +277,23 @@ describe("createVercelProvider", () => {
 	// File operations
 	// -------------------------------------------------------------------------
 
+	it("files.write calls mkDir for parent directory before writeFiles", async () => {
+		const mkDir = vi.fn().mockResolvedValue(undefined);
+		const writeFiles = vi.fn().mockResolvedValue(undefined);
+		const fakeSbx = makeVercelSandbox({ mkDir, writeFiles });
+		mockSandboxCreate.mockResolvedValue(fakeSbx);
+
+		const provider = createVercelProvider();
+		const result = await provider.create({});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		await result.instance.files.write("/some/nested/path.txt", "hello");
+
+		expect(mkDir).toHaveBeenCalledWith("/some/nested");
+		expect(writeFiles).toHaveBeenCalled();
+	});
+
 	it("files.write calls writeFiles with Buffer-converted content", async () => {
 		const writeFiles = vi.fn().mockResolvedValue(undefined);
 		const fakeSbx = makeVercelSandbox({ writeFiles });

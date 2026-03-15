@@ -12,7 +12,9 @@ import {
 // Hono router — Sandcaster-compatible Worker endpoints
 // ---------------------------------------------------------------------------
 
-export const app = new Hono();
+type Bindings = { API_KEY: string };
+
+export const app = new Hono<{ Bindings: Bindings }>();
 
 // ---------------------------------------------------------------------------
 // POST /sandbox/create
@@ -20,6 +22,17 @@ export const app = new Hono();
 // ---------------------------------------------------------------------------
 
 app.post("/sandbox/create", async (c) => {
+	// Require API key via X-API-Key header or Authorization: Bearer <key>
+	const authHeader = c.req.header("Authorization");
+	const apiKey =
+		c.req.header("X-API-Key") ??
+		(authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined);
+
+	const expectedKey = c.env.API_KEY;
+	if (!expectedKey || !apiKey || apiKey !== expectedKey) {
+		return c.json({ error: "Unauthorized: missing or invalid API key" }, 401);
+	}
+
 	const sessionId = crypto.randomUUID();
 	const token = crypto.randomUUID();
 
@@ -35,12 +48,14 @@ app.post("/sandbox/create", async (c) => {
 
 app.post("/sandbox/:id/files/write", authMiddleware, async (c) => {
 	const sessionId = c.req.param("id") ?? "";
-	const { path, content } = (await c.req.json()) as {
+	const { path, content, encoding } = (await c.req.json()) as {
 		path: string;
 		content: string;
+		encoding?: string;
 	};
 
-	writeFile(sessionId, path, content);
+	const resolved = encoding === "base64" ? atob(content) : content;
+	writeFile(sessionId, path, resolved);
 
 	return c.json({ ok: true });
 });

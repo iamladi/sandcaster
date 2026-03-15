@@ -25,13 +25,17 @@ const PROVIDER_ENV_VARS: Record<SandboxProviderName, string | undefined> = {
 };
 
 // Auto-detection priority order: first match wins
+// Auto-detection requires all necessary env vars for a provider to be usable
 const AUTO_DETECT_ORDER: Array<{
 	provider: SandboxProviderName;
-	envVar: string;
+	envVars: string[];
 }> = [
-	{ provider: "e2b", envVar: "E2B_API_KEY" },
-	{ provider: "vercel", envVar: "VERCEL_TOKEN" },
-	{ provider: "cloudflare", envVar: "CLOUDFLARE_API_TOKEN" },
+	{ provider: "e2b", envVars: ["E2B_API_KEY"] },
+	{ provider: "vercel", envVars: ["VERCEL_TOKEN"] },
+	{
+		provider: "cloudflare",
+		envVars: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_SANDBOX_WORKER_URL"],
+	},
 ];
 
 const DOCKER_SOCKET_PATHS = ["/var/run/docker.sock", "/run/docker.sock"];
@@ -89,9 +93,9 @@ export function resolveSandboxProvider(opts: {
 		return { ok: true, name: opts.configProvider };
 	}
 
-	// 3. Auto-detect from env vars (first match wins)
-	for (const { provider, envVar } of AUTO_DETECT_ORDER) {
-		if (env[envVar]) {
+	// 3. Auto-detect from env vars (first match where ALL required vars are set)
+	for (const { provider, envVars } of AUTO_DETECT_ORDER) {
+		if (envVars.every((v) => env[v])) {
 			return { ok: true, name: provider };
 		}
 	}

@@ -387,6 +387,59 @@ describe("runAgentInSandbox", () => {
 		expect(capturedConfig?.timeoutMs).toBe(600 * 1000);
 	});
 
+	it("does not pass template to provider when SANDCASTER_TEMPLATE is unset", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
+
+		const origTemplate = process.env.SANDCASTER_TEMPLATE;
+		delete process.env.SANDCASTER_TEMPLATE;
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			// consume
+		}
+
+		// Provider should receive undefined template so it uses its own default
+		expect(capturedConfig?.template).toBeUndefined();
+
+		if (origTemplate !== undefined) {
+			process.env.SANDCASTER_TEMPLATE = origTemplate;
+		}
+	});
+
+	it("passes SANDCASTER_TEMPLATE to provider when explicitly set", async () => {
+		const instance = makeFakeInstance([]);
+		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
+		registerFakeProvider(instance, {
+			captureConfig: (cfg) => {
+				capturedConfig = cfg;
+			},
+		});
+
+		const origTemplate = process.env.SANDCASTER_TEMPLATE;
+		process.env.SANDCASTER_TEMPLATE = "custom-template-v2";
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			// consume
+		}
+
+		expect(capturedConfig?.template).toBe("custom-template-v2");
+
+		if (origTemplate !== undefined) {
+			process.env.SANDCASTER_TEMPLATE = origTemplate;
+		} else {
+			delete process.env.SANDCASTER_TEMPLATE;
+		}
+	});
+
 	it("uses default timeout of 300s when request has no timeout", async () => {
 		const instance = makeFakeInstance([]);
 		let capturedConfig: Parameters<SandboxProvider["create"]>[0] | undefined;
@@ -578,6 +631,35 @@ describe("runAgentInSandbox", () => {
 		}
 
 		// Check error events don't leak the API key value
+		const errorEvents = events.filter((e) => e.type === "error");
+		for (const event of errorEvents) {
+			expect(JSON.stringify(event)).not.toContain("sk-ant-secret-value");
+		}
+	});
+
+	it("redacts API key values from error messages that contain them", async () => {
+		const instance = makeFakeInstance([]);
+		// Simulate an error that includes the API key in its message
+		instance.commands.run.mockRejectedValue(
+			new Error(
+				"Authentication failed with key sk-ant-secret-value for endpoint",
+			),
+		);
+		registerFakeProvider(instance);
+
+		const events = [];
+		try {
+			for await (const event of runAgentInSandbox({
+				request: makeRequest({
+					apiKeys: { anthropic: "sk-ant-secret-value" },
+				}),
+			})) {
+				events.push(event);
+			}
+		} catch {
+			// may throw
+		}
+
 		const errorEvents = events.filter((e) => e.type === "error");
 		for (const event of errorEvents) {
 			expect(JSON.stringify(event)).not.toContain("sk-ant-secret-value");

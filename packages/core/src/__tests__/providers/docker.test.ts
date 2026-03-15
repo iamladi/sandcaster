@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock execa at the module boundary (system boundary — Docker CLI calls)
@@ -89,10 +89,6 @@ describe("createDockerProvider", () => {
 		vi.clearAllMocks();
 	});
 
-	afterEach(() => {
-		vi.clearAllMocks();
-	});
-
 	// -------------------------------------------------------------------------
 	// Provider identity
 	// -------------------------------------------------------------------------
@@ -106,47 +102,16 @@ describe("createDockerProvider", () => {
 	// Orphan reaping on create
 	// -------------------------------------------------------------------------
 
-	it("reaps orphaned containers on create by calling docker ps then docker rm -f", async () => {
-		// Simulate two orphaned containers
-		mockExeca.mockImplementation((_cmd: string, args: string[]) => {
-			if (args[0] === "ps") {
-				return Promise.resolve(makeExecaResult({ stdout: "orphan1\norphan2" }));
-			}
-			if (args[0] === "rm") {
-				return Promise.resolve(makeExecaResult());
-			}
-			if (args[0] === "pull") {
-				return Promise.resolve(makeExecaResult());
-			}
-			if (args[0] === "run") {
-				return Promise.resolve(makeExecaResult({ stdout: "newcontainer" }));
-			}
-			return Promise.resolve(makeExecaResult());
-		});
+	it("does not reap containers on create — relies on --rm and kill() for cleanup", async () => {
+		setupDefaultMocks();
 
 		const provider = createDockerProvider();
 		await provider.create({ template: "node:20" });
 
+		// Should not call docker ps or docker rm during create
 		const psCalls = _callsFor("ps");
-		expect(psCalls.length).toBeGreaterThanOrEqual(1);
-
-		// Verify docker ps was called with label filter
-		const psCall = psCalls[0];
-		expect(psCall[1]).toContain("--filter");
-		expect(psCall[1]).toContain("label=sandcaster=true");
-
-		// Verify docker rm -f was called for each orphan
 		const rmCalls = _callsFor("rm");
-		expect(rmCalls.length).toBeGreaterThanOrEqual(2);
-	});
-
-	it("does not call docker rm -f if no orphans found", async () => {
-		setupDefaultMocks(); // ps returns ""
-
-		const provider = createDockerProvider();
-		await provider.create({ template: "node:20" });
-
-		const rmCalls = _callsFor("rm");
+		expect(psCalls).toHaveLength(0);
 		expect(rmCalls).toHaveLength(0);
 	});
 
@@ -338,7 +303,7 @@ describe("createDockerProvider", () => {
 	// files.write
 	// -------------------------------------------------------------------------
 
-	it("files.write calls docker exec with cat > path and pipes content as input", async () => {
+	it("files.write uses tee with path as argument (not shell interpolation)", async () => {
 		const containerId = "write-container";
 		setupDefaultMocks(containerId);
 
@@ -355,13 +320,13 @@ describe("createDockerProvider", () => {
 
 		expect(mockExeca).toHaveBeenCalledWith(
 			"docker",
-			["exec", "-i", containerId, "sh", "-c", "cat > '/workspace/hello.txt'"],
-			expect.objectContaining({ input: "hello world" }),
+			["exec", "-i", containerId, "tee", "/workspace/hello.txt"],
+			expect.objectContaining({ input: expect.anything(), stdout: "ignore" }),
 		);
 	});
 
-	it("files.write converts Uint8Array content to string", async () => {
-		const containerId = "write-bytes-container";
+	it("files.write converts string content to Buffer", async () => {
+		const containerId = "write-str-container";
 		setupDefaultMocks(containerId);
 
 		const provider = createDockerProvider();
@@ -373,14 +338,14 @@ describe("createDockerProvider", () => {
 		vi.clearAllMocks();
 		mockExeca.mockResolvedValue(makeExecaResult());
 
-		const bytes = new TextEncoder().encode("byte content");
-		await result.instance.files.write("/workspace/bytes.txt", bytes);
+		await result.instance.files.write("/workspace/text.txt", "text content");
 
-		expect(mockExeca).toHaveBeenCalledWith(
-			"docker",
-			["exec", "-i", containerId, "sh", "-c", "cat > '/workspace/bytes.txt'"],
-			expect.objectContaining({ input: expect.any(String) }),
-		);
+		const callArgs = mockExeca.mock.calls[0] as [
+			string,
+			string[],
+			Record<string, unknown>,
+		];
+		expect(callArgs[2]?.input).toBeInstanceOf(Buffer);
 	});
 
 	// -------------------------------------------------------------------------
@@ -511,6 +476,165 @@ describe("createDockerProvider", () => {
 
 		expect(mockExeca).toHaveBeenCalledWith("docker", ["rm", "-f", containerId]);
 	});
+
+	// -------------------------------------------------------------------------
+	// commands.run — streaming callbacks (non-streaming compatibility)
+	// -------------------------------------------------------------------------
+
+	it("commands.run calls onStdout and onStderr callbacks with buffered output", async () => {
+		const containerId = "callback-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		mockExeca.mockResolvedValue(
+			makeExecaResult({
+				stdout: "hello world\n",
+				stderr: "warning\n",
+				exitCode: 0,
+			}),
+		);
+
+		const onStdout = vi.fn();
+		const onStderr = vi.fn();
+		await result.instance.commands.run("echo hello", { onStdout, onStderr });
+
+		expect(onStdout).toHaveBeenCalledWith("hello world\n");
+		expect(onStderr).toHaveBeenCalledWith("warning\n");
+	});
+
+	it("commands.run does not call onStdout/onStderr when output is empty", async () => {
+		const containerId = "no-callback-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		mockExeca.mockResolvedValue(makeExecaResult({ stdout: "", stderr: "" }));
+
+		const onStdout = vi.fn();
+		const onStderr = vi.fn();
+		await result.instance.commands.run("true", { onStdout, onStderr });
+
+		expect(onStdout).not.toHaveBeenCalled();
+		expect(onStderr).not.toHaveBeenCalled();
+	});
+
+	// -------------------------------------------------------------------------
+	// files.write — path safety
+	// -------------------------------------------------------------------------
+
+	it("files.write safely handles paths with special characters", async () => {
+		const containerId = "safe-path-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		mockExeca.mockResolvedValue(makeExecaResult());
+
+		// Path with single quotes should not break the command
+		await result.instance.files.write("/workspace/user's file.txt", "content");
+
+		// Should use tee with path as an argument, not shell interpolation
+		expect(mockExeca).toHaveBeenCalledWith(
+			"docker",
+			["exec", "-i", containerId, "tee", "/workspace/user's file.txt"],
+			expect.objectContaining({ input: expect.anything(), stdout: "ignore" }),
+		);
+	});
+
+	it("files.write passes Uint8Array as Buffer input without string conversion", async () => {
+		const containerId = "binary-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		mockExeca.mockResolvedValue(makeExecaResult());
+
+		const bytes = new Uint8Array([0x00, 0xff, 0x80, 0x7f]);
+		await result.instance.files.write("/workspace/binary.bin", bytes);
+
+		const callArgs = mockExeca.mock.calls[0] as [
+			string,
+			string[],
+			Record<string, unknown>,
+		];
+		const input = callArgs[2]?.input;
+		// Should pass raw bytes, not decoded string
+		expect(input).toBeInstanceOf(Buffer);
+	});
+
+	// -------------------------------------------------------------------------
+	// files.read — bytes format
+	// -------------------------------------------------------------------------
+
+	it("files.read passes encoding 'buffer' to execa for bytes format", async () => {
+		const containerId = "read-bytes-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		// When encoding: "buffer" is used, execa returns Buffer for stdout
+		const binaryData = Buffer.from([0x00, 0xff, 0x80, 0x7f]);
+		mockExeca.mockResolvedValue({
+			stdout: binaryData,
+			stderr: "",
+			exitCode: 0,
+		});
+
+		const content = await result.instance.files.read("/workspace/binary.bin", {
+			format: "bytes",
+		});
+
+		expect(content).toBeInstanceOf(Uint8Array);
+		expect(Buffer.from(content as Uint8Array)).toEqual(binaryData);
+
+		// Verify execa was called with encoding: "buffer"
+		const callArgs = mockExeca.mock.calls[0] as [
+			string,
+			string[],
+			Record<string, unknown>,
+		];
+		expect(callArgs[2]).toMatchObject({ encoding: "buffer" });
+	});
+
+	// -------------------------------------------------------------------------
+	// Orphan reaping — should not kill concurrent sandboxes
+	// -------------------------------------------------------------------------
+
+	it("does not reap running containers on create (relies on --rm + kill)", async () => {
+		setupDefaultMocks();
+
+		const provider = createDockerProvider();
+		await provider.create({ template: "node:20" });
+
+		// Should NOT call docker ps or docker rm for reaping
+		const psCalls = _callsFor("ps");
+		expect(psCalls).toHaveLength(0);
+	});
+
+	// -------------------------------------------------------------------------
+	// kill
+	// -------------------------------------------------------------------------
 
 	it("kill is idempotent — second kill does not throw even if docker rm -f fails", async () => {
 		const containerId = "double-kill-container";

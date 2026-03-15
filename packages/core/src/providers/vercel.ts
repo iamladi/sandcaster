@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import type {
 	CommandOptions,
 	CreateResult,
@@ -165,10 +166,12 @@ export function createVercelProvider(): SandboxProvider {
 							path: string,
 							content: string | Uint8Array,
 						): Promise<void> {
-							const buffer =
-								typeof content === "string"
-									? Buffer.from(content)
-									: Buffer.from(content);
+							const buffer = Buffer.from(content);
+							// Ensure parent directory exists before writing
+							const dir = posix.dirname(path);
+							if (dir && dir !== "/") {
+								await sbx.mkDir(dir);
+							}
 							await sbx.writeFiles([{ path, content: buffer }]);
 						},
 						async read(

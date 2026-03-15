@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
 
 // ---------------------------------------------------------------------------
@@ -17,6 +17,7 @@ async function request(
 	options?: {
 		body?: unknown;
 		headers?: Record<string, string>;
+		env?: Record<string, string>;
 	},
 ): Promise<Response> {
 	const url = `http://localhost${path}`;
@@ -30,7 +31,21 @@ async function request(
 	if (options?.body !== undefined) {
 		init.body = JSON.stringify(options.body);
 	}
-	return app.request(url, init);
+	return app.request(url, init, options?.env);
+}
+
+const TEST_API_KEY = "test-api-key-for-create";
+const TEST_ENV = { API_KEY: TEST_API_KEY };
+
+async function _createTestSession(): Promise<{
+	sessionId: string;
+	token: string;
+}> {
+	const res = await request("POST", "/sandbox/create", {
+		headers: { "X-API-Key": TEST_API_KEY },
+		env: TEST_ENV,
+	});
+	return (await res.json()) as { sessionId: string; token: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -38,8 +53,14 @@ async function request(
 // ---------------------------------------------------------------------------
 
 describe("POST /sandbox/create", () => {
-	it("returns sessionId and token", async () => {
-		const res = await request("POST", "/sandbox/create");
+	const API_KEY = "test-api-key-for-create";
+	const WORKER_ENV = { API_KEY };
+
+	it("returns sessionId and token when valid API key is provided", async () => {
+		const res = await request("POST", "/sandbox/create", {
+			headers: { "X-API-Key": API_KEY },
+			env: WORKER_ENV,
+		});
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { sessionId: string; token: string };
 		expect(typeof body.sessionId).toBe("string");
@@ -49,11 +70,40 @@ describe("POST /sandbox/create", () => {
 	});
 
 	it("returns unique sessionId on each call", async () => {
-		const res1 = await request("POST", "/sandbox/create");
-		const res2 = await request("POST", "/sandbox/create");
+		const res1 = await request("POST", "/sandbox/create", {
+			headers: { "X-API-Key": API_KEY },
+			env: WORKER_ENV,
+		});
+		const res2 = await request("POST", "/sandbox/create", {
+			headers: { "X-API-Key": API_KEY },
+			env: WORKER_ENV,
+		});
 		const body1 = (await res1.json()) as { sessionId: string };
 		const body2 = (await res2.json()) as { sessionId: string };
 		expect(body1.sessionId).not.toBe(body2.sessionId);
+	});
+
+	it("accepts Bearer token in Authorization header", async () => {
+		const res = await request("POST", "/sandbox/create", {
+			headers: { Authorization: `Bearer ${API_KEY}` },
+			env: WORKER_ENV,
+		});
+		expect(res.status).toBe(200);
+	});
+
+	it("returns 401 without any authentication", async () => {
+		const res = await request("POST", "/sandbox/create", {
+			env: WORKER_ENV,
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("returns 401 with wrong API key", async () => {
+		const res = await request("POST", "/sandbox/create", {
+			headers: { "X-API-Key": "wrong-key-value" },
+			env: WORKER_ENV,
+		});
+		expect(res.status).toBe(401);
 	});
 });
 
@@ -62,15 +112,7 @@ describe("POST /sandbox/:id/files/write", () => {
 	let token: string;
 
 	beforeEach(async () => {
-		const res = await request("POST", "/sandbox/create");
-		const body = (await res.json()) as { sessionId: string; token: string };
-		sessionId = body.sessionId;
-		token = body.token;
-	});
-
-	afterEach(() => {
-		sessionId = "";
-		token = "";
+		({ sessionId, token } = await _createTestSession());
 	});
 
 	it("succeeds with valid auth", async () => {
@@ -95,6 +137,35 @@ describe("POST /sandbox/:id/files/write", () => {
 		});
 		expect(res.status).toBe(401);
 	});
+
+	it("decodes base64 content when encoding field is 'base64'", async () => {
+		const originalContent = "hello binary world";
+		const base64Content = btoa(originalContent);
+
+		// Write with base64 encoding
+		const writeRes = await request(
+			"POST",
+			`/sandbox/${sessionId}/files/write`,
+			{
+				headers: { Authorization: `Bearer ${token}` },
+				body: {
+					path: "/workspace/decoded.txt",
+					content: base64Content,
+					encoding: "base64",
+				},
+			},
+		);
+		expect(writeRes.status).toBe(200);
+
+		// Read back — should be the original content, not base64
+		const readRes = await request(
+			"GET",
+			`/sandbox/${sessionId}/files/read?path=%2Fworkspace%2Fdecoded.txt`,
+			{ headers: { Authorization: `Bearer ${token}` } },
+		);
+		const body = (await readRes.json()) as { content: string };
+		expect(body.content).toBe(originalContent);
+	});
 });
 
 describe("GET /sandbox/:id/files/read", () => {
@@ -102,13 +173,7 @@ describe("GET /sandbox/:id/files/read", () => {
 	let token: string;
 
 	beforeEach(async () => {
-		const createRes = await request("POST", "/sandbox/create");
-		const body = (await createRes.json()) as {
-			sessionId: string;
-			token: string;
-		};
-		sessionId = body.sessionId;
-		token = body.token;
+		({ sessionId, token } = await _createTestSession());
 
 		// Write a file first so we can read it back
 		await request("POST", `/sandbox/${sessionId}/files/write`, {
@@ -151,13 +216,7 @@ describe("POST /sandbox/:id/exec", () => {
 	let token: string;
 
 	beforeEach(async () => {
-		const createRes = await request("POST", "/sandbox/create");
-		const body = (await createRes.json()) as {
-			sessionId: string;
-			token: string;
-		};
-		sessionId = body.sessionId;
-		token = body.token;
+		({ sessionId, token } = await _createTestSession());
 	});
 
 	it("returns stdout, stderr, exitCode with valid auth", async () => {
@@ -197,13 +256,7 @@ describe("POST /sandbox/:id/kill", () => {
 	let token: string;
 
 	beforeEach(async () => {
-		const createRes = await request("POST", "/sandbox/create");
-		const body = (await createRes.json()) as {
-			sessionId: string;
-			token: string;
-		};
-		sessionId = body.sessionId;
-		token = body.token;
+		({ sessionId, token } = await _createTestSession());
 	});
 
 	it("succeeds with valid auth", async () => {

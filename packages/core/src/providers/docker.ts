@@ -20,31 +20,8 @@ function isValidTemplate(template: string): boolean {
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// Orphan reaping — remove any containers labeled sandcaster=true
-// ---------------------------------------------------------------------------
-
-async function reapOrphanedContainers(
-	execa: (
-		cmd: string,
-		args: string[],
-		opts?: Record<string, unknown>,
-	) => Promise<{ stdout: string }>,
-): Promise<void> {
-	const { stdout } = await execa("docker", [
-		"ps",
-		"-q",
-		"--filter",
-		"label=sandcaster=true",
-	]);
-	const ids = stdout
-		.split("\n")
-		.map((s) => s.trim())
-		.filter(Boolean);
-	for (const id of ids) {
-		await execa("docker", ["rm", "-f", id]);
-	}
-}
+// Note: No global container reaping on create — containers use --rm and are
+// cleaned up via instance.kill(). Global reaping would kill concurrent sandboxes.
 
 // ---------------------------------------------------------------------------
 // createDockerProvider
@@ -68,19 +45,6 @@ export function createDockerProvider(): SandboxProvider {
 			}
 
 			const { execa } = await import("execa");
-
-			// Reap orphaned containers before starting a new one
-			try {
-				await reapOrphanedContainers(
-					execa as unknown as (
-						cmd: string,
-						args: string[],
-						opts?: Record<string, unknown>,
-					) => Promise<{ stdout: string }>,
-				);
-			} catch {
-				// Non-fatal — continue even if reaping fails
-			}
 
 			// Pull / verify image exists
 			try {
@@ -126,6 +90,7 @@ export function createDockerProvider(): SandboxProvider {
 			}
 
 			// Build and return the SandboxInstance
+			// Reuse the execa binding from create() — avoids repeated dynamic imports
 			const instance: SandboxInstance = {
 				workDir: "/workspace",
 				capabilities: {
@@ -143,29 +108,26 @@ export function createDockerProvider(): SandboxProvider {
 						path: string,
 						content: string | Uint8Array,
 					): Promise<void> {
-						const { execa: execaInner } = await import("execa");
-						const contentStr =
-							typeof content === "string"
-								? content
-								: new TextDecoder().decode(content);
-						await execaInner(
-							"docker",
-							["exec", "-i", containerId, "sh", "-c", `cat > '${path}'`],
-							{ input: contentStr },
-						);
+						const input = Buffer.from(content);
+						// Use tee with path as argument — avoids shell injection
+						await execa("docker", ["exec", "-i", containerId, "tee", path], {
+							input,
+							stdout: "ignore",
+						});
 					},
 
 					async read(
 						path: string,
-						_opts?: { format?: "text" | "bytes" },
+						opts?: { format?: "text" | "bytes" },
 					): Promise<string | Uint8Array> {
-						const { execa: execaInner } = await import("execa");
-						const { stdout } = await execaInner("docker", [
-							"exec",
-							containerId,
-							"cat",
-							path,
-						]);
+						const args = ["exec", containerId, "cat", path];
+						if (opts?.format === "bytes") {
+							const { stdout } = await execa("docker", args, {
+								encoding: "buffer",
+							});
+							return new Uint8Array(stdout);
+						}
+						const { stdout } = await execa("docker", args);
 						return stdout;
 					},
 				},
@@ -174,13 +136,12 @@ export function createDockerProvider(): SandboxProvider {
 						cmd: string,
 						opts?: CommandOptions,
 					): Promise<CommandResult> {
-						const { execa: execaInner } = await import("execa");
 						const execaOpts: Record<string, unknown> = { reject: false };
 						if (opts?.timeoutMs !== undefined) {
 							execaOpts.timeout = opts.timeoutMs;
 						}
 
-						const result = await execaInner(
+						const result = await execa(
 							"docker",
 							["exec", containerId, "sh", "-c", cmd],
 							execaOpts,
@@ -197,17 +158,19 @@ export function createDockerProvider(): SandboxProvider {
 							};
 						}
 
-						return {
-							stdout: result.stdout ?? "",
-							stderr: result.stderr ?? "",
-							exitCode: result.exitCode ?? 0,
-						};
+						const stdout = result.stdout ?? "";
+						const stderr = result.stderr ?? "";
+
+						// Call streaming callbacks with buffered output (non-streaming compatibility)
+						if (stdout) opts?.onStdout?.(stdout);
+						if (stderr) opts?.onStderr?.(stderr);
+
+						return { stdout, stderr, exitCode: result.exitCode ?? 0 };
 					},
 				},
 				async kill(): Promise<void> {
-					const { execa: execaInner } = await import("execa");
 					try {
-						await execaInner("docker", ["rm", "-f", containerId]);
+						await execa("docker", ["rm", "-f", containerId]);
 					} catch {
 						// Idempotent — ignore errors if container already removed
 					}

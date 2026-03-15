@@ -67,6 +67,17 @@ export interface RunOptions {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Redact known API key values from a string */
+function redactApiKeys(text: string, envs: Record<string, string>): string {
+	let result = text;
+	for (const value of Object.values(envs)) {
+		if (value && value.length >= 8) {
+			result = result.replaceAll(value, "[REDACTED]");
+		}
+	}
+	return result;
+}
+
 /** Build the env vars to pass into the sandbox */
 function buildEnvs(request: QueryRequest): Record<string, string> {
 	const envs: Record<string, string> = {};
@@ -198,12 +209,15 @@ export async function* runAgentInSandbox(
 	// ------------------------------------------------------------------
 	// 3. Create sandbox via provider
 	// ------------------------------------------------------------------
-	const template = process.env.SANDCASTER_TEMPLATE ?? "sandcaster-v1";
+	// Only pass template when explicitly set — let each provider use its own default
+	const template = process.env.SANDCASTER_TEMPLATE;
+
+	const envs = buildEnvs(request);
 
 	const createResult = await provider.create({
 		template,
 		timeoutMs,
-		envs: buildEnvs(request),
+		envs,
 		metadata: {
 			requestId: requestId ?? "unknown",
 		},
@@ -325,7 +339,7 @@ export async function* runAgentInSandbox(
 				: errMsg;
 			yield {
 				type: "error",
-				content: `Runner error: ${detail}`,
+				content: redactApiKeys(`Runner error: ${detail}`, envs),
 				code: "RUNNER_ERROR",
 			} satisfies SandcasterEvent;
 		}

@@ -59,14 +59,29 @@ describe("resolveSandboxProvider", () => {
 		}
 	});
 
-	it("auto-detects cloudflare from CLOUDFLARE_API_TOKEN", () => {
+	it("auto-detects cloudflare only when both CLOUDFLARE_API_TOKEN and CLOUDFLARE_SANDBOX_WORKER_URL are set", () => {
+		const result = resolveSandboxProvider({
+			env: {
+				CLOUDFLARE_API_TOKEN: "mytoken",
+				CLOUDFLARE_SANDBOX_WORKER_URL: "https://worker.example.dev",
+			},
+			checkDockerSocket: noDocker,
+		});
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.name).toBe("cloudflare");
+		}
+	});
+
+	it("does NOT auto-detect cloudflare when only CLOUDFLARE_API_TOKEN is set (missing worker URL)", () => {
 		const result = resolveSandboxProvider({
 			env: { CLOUDFLARE_API_TOKEN: "mytoken" },
 			checkDockerSocket: noDocker,
 		});
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.name).toBe("cloudflare");
+			// Should fall through to docker/e2b fallback, not select cloudflare
+			expect(result.name).not.toBe("cloudflare");
 		}
 	});
 

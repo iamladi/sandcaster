@@ -111,7 +111,7 @@ describe("createCloudflareProvider", () => {
 		});
 	});
 
-	it("POSTs to /sandbox/create with template, timeoutMs, envs", async () => {
+	it("POSTs to /sandbox/create with template, timeoutMs, envs and apiKey auth", async () => {
 		setupSuccessfulCreate();
 
 		const provider = createCloudflareProvider();
@@ -120,6 +120,7 @@ describe("createCloudflareProvider", () => {
 			timeoutMs: 30000,
 			envs: { FOO: "bar" },
 			metadata: { workerUrl: WORKER_URL },
+			apiKey: "cf-api-key-123",
 		});
 
 		expect(mockFetch).toHaveBeenCalledWith(
@@ -128,6 +129,7 @@ describe("createCloudflareProvider", () => {
 				method: "POST",
 				headers: expect.objectContaining({
 					"Content-Type": "application/json",
+					Authorization: "Bearer cf-api-key-123",
 				}),
 				body: JSON.stringify({
 					template: "my-sandbox",
@@ -437,6 +439,81 @@ describe("createCloudflareProvider", () => {
 				body: JSON.stringify({ cmd: "sleep 1", timeoutMs: 5000 }),
 			}),
 		);
+	});
+
+	// -------------------------------------------------------------------------
+	// commands.run — streaming callbacks (non-streaming compatibility)
+	// -------------------------------------------------------------------------
+
+	it("commands.run calls onStdout and onStderr callbacks with response data", async () => {
+		setupSuccessfulCreate();
+		mockFetch.mockResolvedValueOnce(
+			makeJsonResponse({
+				stdout: "output line\n",
+				stderr: "error line\n",
+				exitCode: 0,
+			}),
+		);
+
+		const provider = createCloudflareProvider();
+		const result = await provider.create({
+			metadata: { workerUrl: WORKER_URL },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const onStdout = vi.fn();
+		const onStderr = vi.fn();
+		await result.instance.commands.run("echo hello", { onStdout, onStderr });
+
+		expect(onStdout).toHaveBeenCalledWith("output line\n");
+		expect(onStderr).toHaveBeenCalledWith("error line\n");
+	});
+
+	it("commands.run does not call callbacks when output is empty", async () => {
+		setupSuccessfulCreate();
+		mockFetch.mockResolvedValueOnce(
+			makeJsonResponse({ stdout: "", stderr: "", exitCode: 0 }),
+		);
+
+		const provider = createCloudflareProvider();
+		const result = await provider.create({
+			metadata: { workerUrl: WORKER_URL },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const onStdout = vi.fn();
+		const onStderr = vi.fn();
+		await result.instance.commands.run("true", { onStdout, onStderr });
+
+		expect(onStdout).not.toHaveBeenCalled();
+		expect(onStderr).not.toHaveBeenCalled();
+	});
+
+	// -------------------------------------------------------------------------
+	// files.write — binary handling
+	// -------------------------------------------------------------------------
+
+	it("files.write sends base64-encoded content for Uint8Array", async () => {
+		setupSuccessfulCreate();
+		mockFetch.mockResolvedValueOnce(makeJsonResponse({ ok: true }));
+
+		const provider = createCloudflareProvider();
+		const result = await provider.create({
+			metadata: { workerUrl: WORKER_URL },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const bytes = new Uint8Array([0x00, 0xff, 0x80]);
+		await result.instance.files.write("/workspace/binary.bin", bytes);
+
+		const callBody = JSON.parse(
+			(mockFetch.mock.calls[1] as [string, RequestInit])[1].body as string,
+		);
+		expect(callBody.encoding).toBe("base64");
+		expect(callBody.content).toBe(Buffer.from(bytes).toString("base64"));
 	});
 
 	// -------------------------------------------------------------------------

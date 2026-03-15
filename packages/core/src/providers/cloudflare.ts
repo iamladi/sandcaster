@@ -75,12 +75,19 @@ export function createCloudflareProvider(): SandboxProvider {
 				};
 			}
 
-			// POST /sandbox/create
+			// POST /sandbox/create — authenticated with API key
+			const createHeaders: Record<string, string> = {
+				"Content-Type": "application/json",
+			};
+			if (config.apiKey) {
+				createHeaders.Authorization = `Bearer ${config.apiKey}`;
+			}
+
 			let createResp: Response;
 			try {
 				createResp = await fetch(`${workerUrl}/sandbox/create`, {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: createHeaders,
 					body: JSON.stringify({
 						...(config.template !== undefined
 							? { template: config.template }
@@ -161,14 +168,21 @@ export function createCloudflareProvider(): SandboxProvider {
 						path: string,
 						content: string | Uint8Array,
 					): Promise<void> {
-						const contentStr =
-							typeof content === "string"
-								? content
-								: new TextDecoder().decode(content);
+						let body: Record<string, string>;
+						if (typeof content === "string") {
+							body = { path, content };
+						} else {
+							// Binary content: base64-encode to avoid UTF-8 corruption
+							body = {
+								path,
+								content: Buffer.from(content).toString("base64"),
+								encoding: "base64",
+							};
+						}
 						const resp = await workerPost(
 							`${workerUrl}/sandbox/${sessionId}/files/write`,
 							token,
-							{ path, content: contentStr },
+							body,
 						);
 						if (!resp.ok) {
 							throw new SandboxOperationError(
@@ -229,7 +243,13 @@ export function createCloudflareProvider(): SandboxProvider {
 									: "SANDBOX_ERROR",
 							);
 						}
-						return resp.json() as Promise<CommandResult>;
+						const result = (await resp.json()) as CommandResult;
+
+						// Call streaming callbacks with buffered output (non-streaming compatibility)
+						if (result.stdout) opts?.onStdout?.(result.stdout);
+						if (result.stderr) opts?.onStderr?.(result.stderr);
+
+						return result;
 					},
 				},
 				async kill(): Promise<void> {
