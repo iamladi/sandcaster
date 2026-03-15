@@ -1,12 +1,10 @@
 import posix from "node:path/posix";
-import type { Sandbox } from "e2b";
+import type { SandboxInstance } from "./sandbox-provider.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const HOME = "/home/user";
-const SKILLS_BASE = `${HOME}/.pi/skills`;
 const MAX_FILES = 10;
 const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB
@@ -63,12 +61,14 @@ function validateRelativePath(raw: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Upload user files to /home/user/ in the sandbox, creating parent dirs as needed.
+ * Upload user files to the sandbox working directory, creating parent dirs as needed.
  */
 export async function uploadFiles(
-	sbx: Sandbox,
+	sbx: SandboxInstance,
 	files: Record<string, string>,
 ): Promise<void> {
+	const home = sbx.workDir;
+
 	// Validate and normalize all paths
 	const normalized: Record<string, string> = {};
 	for (const [path, content] of Object.entries(files)) {
@@ -81,7 +81,7 @@ export async function uploadFiles(
 	for (const path of Object.keys(normalized)) {
 		const dir = posix.dirname(path);
 		if (dir && dir !== ".") {
-			dirs.add(`${HOME}/${dir}`);
+			dirs.add(`${home}/${dir}`);
 		}
 	}
 
@@ -94,7 +94,7 @@ export async function uploadFiles(
 	// Write each file individually
 	await Promise.all(
 		Object.entries(normalized).map(([path, content]) =>
-			sbx.files.write(`${HOME}/${path}`, content),
+			sbx.files.write(`${home}/${path}`, content),
 		),
 	);
 }
@@ -104,24 +104,26 @@ export async function uploadFiles(
 // ---------------------------------------------------------------------------
 
 /**
- * Upload skills to /home/user/.pi/skills/<name>/SKILL.md in the sandbox.
+ * Upload skills to <workDir>/.pi/skills/<name>/SKILL.md in the sandbox.
  */
 export async function uploadSkills(
-	sbx: Sandbox,
+	sbx: SandboxInstance,
 	skills: { name: string; content: string }[],
 ): Promise<void> {
 	if (skills.length === 0) return;
 
+	const skillsBase = `${sbx.workDir}/.pi/skills`;
+
 	// Create all skill directories (shell-quoted)
 	const dirs = skills
-		.map((s) => shellQuote(`${SKILLS_BASE}/${s.name}`))
+		.map((s) => shellQuote(`${skillsBase}/${s.name}`))
 		.join(" ");
 	await sbx.commands.run(`mkdir -p ${dirs}`);
 
 	// Write all SKILL.md files
 	await Promise.all(
 		skills.map((s) =>
-			sbx.files.write(`${SKILLS_BASE}/${s.name}/SKILL.md`, s.content),
+			sbx.files.write(`${skillsBase}/${s.name}/SKILL.md`, s.content),
 		),
 	);
 }
@@ -135,7 +137,7 @@ export async function uploadSkills(
  * Returns the marker path.
  */
 export async function createExtractionMarker(
-	sbx: Sandbox,
+	sbx: SandboxInstance,
 	requestId: string,
 ): Promise<string> {
 	const markerPath = `/tmp/sandcaster-extract-${requestId}.marker`;
@@ -151,14 +153,16 @@ export async function createExtractionMarker(
  * Extract new files created after the marker, returning file events.
  */
 export async function extractGeneratedFiles(
-	sbx: Sandbox,
+	sbx: SandboxInstance,
 	inputFileNames: Set<string>,
 	_requestId: string,
 	markerPath: string,
 ): Promise<Array<{ type: "file"; path: string; content: string }>> {
+	const home = sbx.workDir;
+
 	try {
 		// Find files newer than the marker, excluding dotfiles
-		const findCmd = `find /home/user -path '*/.*' -prune -o -type f -cnewer ${shellQuote(markerPath)} -printf '%P\\t%s\\n'`;
+		const findCmd = `find ${home} -path '*/.*' -prune -o -type f -cnewer ${shellQuote(markerPath)} -printf '%P\\t%s\\n'`;
 		const { stdout } = await sbx.commands.run(findCmd);
 
 		// Parse the find output into (relativePath, sizeBytes) pairs
@@ -199,7 +203,7 @@ export async function extractGeneratedFiles(
 		for (const entry of capped) {
 			if (totalBytes + entry.size > MAX_TOTAL_BYTES) break;
 
-			const content = await sbx.files.read(`${HOME}/${entry.path}`, {
+			const content = await sbx.files.read(`${home}/${entry.path}`, {
 				format: "text",
 			});
 

@@ -5,7 +5,6 @@ import { initCommand } from "./commands/init.js";
 import { queryCommand } from "./commands/query.js";
 import { serveCommand } from "./commands/serve.js";
 import { templatesCommand } from "./commands/templates.js";
-import { webhookCommand } from "./commands/webhook.js";
 import { parseEnvFile } from "./parse-env.js";
 
 // Load .env with override — the project .env is the source of truth for API keys.
@@ -18,13 +17,7 @@ if (existsSync(".env")) {
 	}
 }
 
-const knownSubcommands = new Set([
-	"query",
-	"serve",
-	"init",
-	"webhook",
-	"templates",
-]);
+const knownSubcommands = new Set(["query", "serve", "init", "templates"]);
 
 const main = defineCommand({
 	meta: {
@@ -35,7 +28,6 @@ const main = defineCommand({
 		query: queryCommand,
 		serve: serveCommand,
 		init: initCommand,
-		webhook: webhookCommand,
 		templates: templatesCommand,
 	},
 });

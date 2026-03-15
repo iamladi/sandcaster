@@ -126,29 +126,6 @@ describe("executeServe", () => {
 			);
 		});
 
-		it("passes webhookSecret from SANDSTORM_WEBHOOK_SECRET compat env var", async () => {
-			vi.stubEnv("SANDSTORM_WEBHOOK_SECRET", "compat-secret");
-			const deps = makeDefaultDeps();
-
-			await executeServe(makeDefaultArgs(), deps);
-
-			expect(deps.createApp).toHaveBeenCalledWith(
-				expect.objectContaining({ webhookSecret: "compat-secret" }),
-			);
-		});
-
-		it("prefers SANDCASTER_WEBHOOK_SECRET over SANDSTORM_WEBHOOK_SECRET", async () => {
-			vi.stubEnv("SANDSTORM_WEBHOOK_SECRET", "compat-secret");
-			vi.stubEnv("SANDCASTER_WEBHOOK_SECRET", "new-secret");
-			const deps = makeDefaultDeps();
-
-			await executeServe(makeDefaultArgs(), deps);
-
-			expect(deps.createApp).toHaveBeenCalledWith(
-				expect.objectContaining({ webhookSecret: "new-secret" }),
-			);
-		});
-
 		it("passes corsOrigins as array from comma-separated env var", async () => {
 			vi.stubEnv("SANDCASTER_CORS_ORIGINS", "https://a.com,https://b.com");
 			const deps = makeDefaultDeps();

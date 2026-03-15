@@ -13,7 +13,6 @@ import {
 	recordRequest,
 	recordRequestDuration,
 	recordSandboxCreation,
-	recordWebhookEvent,
 	sandboxStarted,
 	sandboxStopped,
 } from "../telemetry.js";
@@ -88,13 +87,6 @@ describe("telemetry (disabled)", () => {
 
 		it("recordQueueDrop does not throw", () => {
 			expect(() => recordQueueDrop()).not.toThrow();
-		});
-
-		it("recordWebhookEvent does not throw", () => {
-			expect(() => recordWebhookEvent()).not.toThrow();
-			expect(() =>
-				recordWebhookEvent({ eventType: "sandbox.started" }),
-			).not.toThrow();
 		});
 	});
 

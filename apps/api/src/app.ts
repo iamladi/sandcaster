@@ -6,7 +6,6 @@ import { createCorsMiddleware } from "./middleware/cors.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerQueryRoutes } from "./routes/query.js";
 import { registerRunsRoutes } from "./routes/runs.js";
-import { registerWebhookRoutes } from "./routes/webhooks.js";
 import type { AppDeps } from "./types.js";
 
 export function createApp(deps: AppDeps): Hono {
@@ -32,7 +31,5 @@ export function createApp(deps: AppDeps): Hono {
 		runStore: deps.runStore,
 	});
 	registerRunsRoutes(app, { runStore: deps.runStore });
-	registerWebhookRoutes(app, { webhookSecret: deps.webhookSecret });
-
 	return app;
 }

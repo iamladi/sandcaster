@@ -12,6 +12,12 @@ export const PROVIDER_VALUES = [
 	"openrouter",
 ] as const;
 export const THINKING_LEVEL_VALUES = ["none", "low", "medium", "high"] as const;
+export const SANDBOX_PROVIDER_VALUES = [
+	"e2b",
+	"vercel",
+	"docker",
+	"cloudflare",
+] as const;
 
 const WINDOWS_DRIVE_ABS_PATH = /^[a-zA-Z]:[\\/]/;
 
@@ -129,6 +135,8 @@ export const QueryRequestSchema = z.object({
 			anthropic: z.string().optional(),
 			e2b: z.string().optional(),
 			openrouter: z.string().optional(),
+			vercel: z.string().optional(),
+			cloudflare: z.string().optional(),
 		})
 		.optional(),
 	model: z.string().min(1).optional(),
@@ -153,6 +161,7 @@ export const QueryRequestSchema = z.object({
 		.optional(),
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
+	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
 });
 
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
@@ -182,9 +191,9 @@ export const SandcasterConfigSchema = z.object({
 	skillsDir: z.string().optional(),
 	allowedTools: z.array(z.string()).optional(),
 	templateSkills: z.boolean().optional(),
-	webhookUrl: z.url().optional(),
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
+	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
 });
 
 export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;

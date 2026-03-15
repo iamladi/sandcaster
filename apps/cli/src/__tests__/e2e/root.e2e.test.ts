@@ -5,7 +5,7 @@ describe("CLI root", () => {
 	it("--help prints usage with all 4 subcommands and exits 0", async () => {
 		const result = await runCli(["--help"]);
 		expect(result.exitCode).toBe(0);
-		for (const cmd of ["query", "serve", "init", "webhook"]) {
+		for (const cmd of ["query", "serve", "init", "templates"]) {
 			expect(result.stdout + result.stderr).toContain(cmd);
 		}
 	});

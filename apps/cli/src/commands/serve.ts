@@ -40,9 +40,6 @@ export async function executeServe(
 	deps.loadConfig();
 
 	const apiKey = process.env.SANDCASTER_API_KEY;
-	const webhookSecret =
-		process.env.SANDCASTER_WEBHOOK_SECRET ??
-		process.env.SANDSTORM_WEBHOOK_SECRET;
 	const corsOriginsRaw = process.env.SANDCASTER_CORS_ORIGINS;
 	const corsOrigins = corsOriginsRaw ? corsOriginsRaw.split(",") : undefined;
 
@@ -59,7 +56,6 @@ export async function executeServe(
 
 	const app = deps.createApp({
 		apiKey,
-		webhookSecret,
 		corsOrigins,
 		version,
 		runAgent: deps.runAgent,

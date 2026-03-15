@@ -13,7 +13,6 @@ const app = createApp({
 	runStore: createRunStore(),
 	runAgent: runAgentInSandbox,
 	apiKey: process.env.SANDCASTER_API_KEY,
-	webhookSecret: process.env.SANDCASTER_WEBHOOK_SECRET,
 	version: pkg.version,
 	corsOrigins: (process.env.CORS_ORIGINS ?? "*")
 		.split(",")

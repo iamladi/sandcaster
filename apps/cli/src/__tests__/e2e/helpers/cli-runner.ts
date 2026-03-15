@@ -34,8 +34,6 @@ function sanitizedEnv(
 	for (const key of [
 		"E2B_API_KEY",
 		"SANDCASTER_API_KEY",
-		"SANDCASTER_WEBHOOK_SECRET",
-		"SANDSTORM_WEBHOOK_SECRET",
 		"ANTHROPIC_API_KEY",
 		"OPENAI_API_KEY",
 		"GOOGLE_API_KEY",
