@@ -1,7 +1,7 @@
 ---
 title: "Speculative Branching: Parallel Agent Execution with Competitive Selection"
 type: Feature
-issue: null
+issue: 6
 research: []
 status: Ready for Implementation
 reviewed: true
