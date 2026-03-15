@@ -50,14 +50,14 @@ cd sandcaster
 bun install && bunx turbo build
 cd apps/cli && bun link      # registers the `sandcaster` command globally
 
-sandcaster init
+sandcaster init general-assistant
 cd general-assistant
 sandcaster "Compare Notion, Coda, and Slite for async product teams"
 ```
 
-`sandcaster init` scaffolds a runnable starter with `sandcaster.json`, a starter README, `.env.example`,
-and any starter-specific assets. If provider settings are missing, the guided flow asks once and
-writes `.env` for you.
+`sandcaster init <starter>` scaffolds a runnable starter with `sandcaster.json`, a starter README,
+`.env.example`, and any starter-specific assets. If provider env vars are detected in your shell,
+Sandcaster writes `.env` automatically.
 
 Direct forms:
 
@@ -131,7 +131,7 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 | CLI | Click | Ink + React TUI with live status |
 | API framework | FastAPI | Hono |
 | Monorepo | flat | Turborepo with isolated packages |
-| Models | Anthropic only | Anthropic, OpenAI, Google, OpenRouter |
+| Models | Claude (multi-cloud + OpenRouter) | Anthropic, OpenAI, Google, OpenRouter |
 | Sandbox providers | E2B only | E2B, Vercel, Docker, Cloudflare |
 | Thinking levels | No | none / low / medium / high |
 
