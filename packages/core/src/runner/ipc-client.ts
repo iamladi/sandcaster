@@ -41,8 +41,16 @@ export class IpcClient {
 		while (Date.now() < deadline) {
 			const raw = await this.deps.readFile(responsePath);
 			if (raw !== null) {
-				const response = JSON.parse(raw) as CompositeResponse;
-				await this.deps.deleteFile(responsePath);
+				let response: CompositeResponse;
+				try {
+					response = JSON.parse(raw) as CompositeResponse;
+				} catch {
+					await this.deps.deleteFile(responsePath).catch(() => {});
+					throw new Error(
+						`IPC response parse error for request ${id}: malformed JSON`,
+					);
+				}
+				await this.deps.deleteFile(responsePath).catch(() => {});
 				return response;
 			}
 			await this.deps.sleep(this.config.pollIntervalMs);

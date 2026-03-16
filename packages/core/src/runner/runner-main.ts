@@ -29,18 +29,24 @@ export async function runAgent(
 		config.composite_enabled === true &&
 		typeof config.composite_nonce === "string"
 	) {
+		const _readFileSync = readFileSync;
+		const _unlinkSync = unlinkSync;
 		const ipcClient = new IpcClient(
 			{
 				emit: (line) => process.stdout.write(`${line}\n`),
 				readFile: async (path) => {
 					try {
-						return readFileSync(path, "utf-8");
+						return _readFileSync(path, "utf-8");
 					} catch {
 						return null;
 					}
 				},
 				deleteFile: async (path) => {
-					unlinkSync(path);
+					try {
+						_unlinkSync(path);
+					} catch {
+						// File may already be deleted by host
+					}
 				},
 				sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 			},

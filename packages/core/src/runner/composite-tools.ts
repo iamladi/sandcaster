@@ -63,7 +63,7 @@ export function createCompositeTools(ipcClient: IpcClient): AgentTool<any>[] {
 			),
 		}),
 		execute: async (_toolCallId, params) => {
-			if (params.sandbox === "primary") {
+			if (params.sandbox.trim().toLowerCase() === "primary") {
 				return errorResult(
 					"Cannot exec_in 'primary' — use the bash tool for the primary sandbox.",
 				);
@@ -132,7 +132,7 @@ export function createCompositeTools(ipcClient: IpcClient): AgentTool<any>[] {
 			name: Type.String({ description: "Name of the sandbox to kill" }),
 		}),
 		execute: async (_toolCallId, params) => {
-			if (params.name === "primary") {
+			if (params.name.trim().toLowerCase() === "primary") {
 				return errorResult(
 					"Cannot kill 'primary' — the primary sandbox is host-owned.",
 				);
