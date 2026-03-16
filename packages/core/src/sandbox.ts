@@ -430,6 +430,14 @@ export async function* runAgentInSandbox(
 							continue;
 						}
 
+						// Validate request ID to prevent shell injection
+						if (!/^[a-zA-Z0-9_-]+$/.test(compositeReq.id)) {
+							console.warn(
+								`[sandcaster] Rejecting composite_request with invalid id`,
+							);
+							continue;
+						}
+
 						// Handle the request and write IPC response
 						let response: Parameters<typeof serializeCompositeResponse>[0];
 						try {
