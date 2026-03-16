@@ -321,7 +321,6 @@ export async function* runAgentInSandbox(
 		const poolRef = pool;
 		sigTermHandler = async () => {
 			await poolRef.killAll();
-			process.exit(143); // 128 + 15 (SIGTERM)
 		};
 		process.on("SIGTERM", sigTermHandler);
 	}

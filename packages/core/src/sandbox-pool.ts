@@ -225,7 +225,7 @@ export class SandboxPool {
 		provider: SandboxProviderName,
 		template?: string,
 	): Promise<SandboxInstance> {
-		if (name === "primary") {
+		if (name.trim().toLowerCase() === "primary") {
 			throw new Error(`Sandbox name "primary" is reserved`);
 		}
 
@@ -239,9 +239,10 @@ export class SandboxPool {
 			);
 		}
 
-		if (this._secondary.size >= this._config.maxSandboxes) {
+		const activeAndPending = this._secondary.size + this._pendingSpawns.size;
+		if (activeAndPending >= this._config.maxSandboxes) {
 			throw new Error(
-				`Cannot spawn: active secondary count (${this._secondary.size}) has reached maxSandboxes (${this._config.maxSandboxes})`,
+				`Cannot spawn: active + pending count (${activeAndPending}) has reached maxSandboxes (${this._config.maxSandboxes})`,
 			);
 		}
 

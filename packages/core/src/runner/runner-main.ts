@@ -52,8 +52,11 @@ export async function runAgent(
 			},
 			{
 				nonce: config.composite_nonce,
-				pollIntervalMs: 200,
-				pollTimeoutMs: 60000,
+				pollIntervalMs:
+					typeof config.composite_poll_interval_ms === "number"
+						? config.composite_poll_interval_ms
+						: 200,
+				pollTimeoutMs: 360000, // 6 min — exceeds max exec_in timeout (300s)
 			},
 		);
 		tools.push(...createCompositeTools(ipcClient));

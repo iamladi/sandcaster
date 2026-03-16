@@ -78,11 +78,15 @@ export function createCompositeTools(ipcClient: IpcClient): AgentTool<any>[] {
 				return errorResult(response.error ?? "exec failed");
 			}
 			const result = response.result as
-				| { stdout?: string; stderr?: string }
+				| { stdout?: string; stderr?: string; exitCode?: number }
 				| undefined;
 			const stdout = result?.stdout ?? "";
 			const stderr = result?.stderr ?? "";
+			const exitCode = result?.exitCode ?? 0;
 			const output = [stdout, stderr].filter(Boolean).join("\n");
+			if (exitCode !== 0) {
+				return errorResult(output || `Command exited with code ${exitCode}`);
+			}
 			return successResult(output);
 		},
 	};
@@ -109,7 +113,10 @@ export function createCompositeTools(ipcClient: IpcClient): AgentTool<any>[] {
 				return errorResult(response.error ?? "transfer failed");
 			}
 			const result = response.result as
-				| { transferred?: string[]; failed?: string[] }
+				| {
+						transferred?: string[];
+						failed?: Array<{ path: string; error: string }>;
+				  }
 				| undefined;
 			const transferred = result?.transferred ?? [];
 			const failed = result?.failed ?? [];
@@ -117,7 +124,10 @@ export function createCompositeTools(ipcClient: IpcClient): AgentTool<any>[] {
 				`Transferred ${transferred.length} file(s): ${transferred.join(", ") || "(none)"}`,
 			];
 			if (failed.length > 0) {
-				lines.push(`Failed (${failed.length}): ${failed.join(", ")}`);
+				const failedDesc = failed.map((f) =>
+					typeof f === "string" ? f : `${f.path}: ${f.error}`,
+				);
+				lines.push(`Failed (${failed.length}): ${failedDesc.join(", ")}`);
 			}
 			return successResult(lines.join("\n"));
 		},
