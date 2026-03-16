@@ -73,7 +73,11 @@ export function validateNonce(
 	request: CompositeRequest,
 	expectedNonce: string,
 ): boolean {
-	return request.nonce.length > 0 && request.nonce === expectedNonce;
+	return (
+		typeof request.nonce === "string" &&
+		request.nonce.length > 0 &&
+		request.nonce === expectedNonce
+	);
 }
 
 /**

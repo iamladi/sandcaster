@@ -266,9 +266,10 @@ export async function* runAgentInSandbox(
 
 	let pool: SandboxPool | undefined;
 	let compositeNonce: string | undefined;
+	let resolvedComposite: ReturnType<typeof resolveCompositeConfig> | undefined;
 
 	if (compositeActive) {
-		const resolvedComposite = resolveCompositeConfig(
+		resolvedComposite = resolveCompositeConfig(
 			config?.composite,
 			request.composite,
 		);
@@ -331,13 +332,10 @@ export async function* runAgentInSandbox(
 		const agentConfig = buildAgentConfig(
 			request,
 			config,
-			compositeActive && compositeNonce !== undefined
+			compositeActive && compositeNonce !== undefined && resolvedComposite
 				? {
 						nonce: compositeNonce,
-						pollIntervalMs: resolveCompositeConfig(
-							config?.composite,
-							request.composite,
-						).pollIntervalMs,
+						pollIntervalMs: resolvedComposite.pollIntervalMs,
 					}
 				: undefined,
 		);
@@ -443,7 +441,7 @@ export async function* runAgentInSandbox(
 							tmpPath,
 							serializeCompositeResponse(response),
 						);
-						await instance.commands.run(`mv ${tmpPath} ${finalPath}`);
+						await instance.commands.run(`mv '${tmpPath}' '${finalPath}'`);
 
 						continue; // Do not yield composite requests as events
 					}
