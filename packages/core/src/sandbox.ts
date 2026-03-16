@@ -14,6 +14,7 @@ import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
+	shellQuote,
 	uploadFiles,
 	uploadSkills,
 } from "./files.js";
@@ -21,6 +22,7 @@ import { resolveCompositeConfig, SandboxPool } from "./sandbox-pool.js";
 import type { SandboxInstance } from "./sandbox-provider.js";
 import { getSandboxProvider } from "./sandbox-registry.js";
 import {
+	PROVIDER_ENV_VARS,
 	resolveProviderCredential,
 	resolveSandboxProvider,
 } from "./sandbox-resolver.js";
@@ -300,9 +302,10 @@ export async function* runAgentInSandbox(
 				await secondaryProviderResult.provider.create({
 					template: factoryTemplate,
 					timeoutMs,
-					envs: secondaryApiKey
-						? { [getProviderEnvKey(factoryProvider)]: secondaryApiKey }
-						: {},
+					envs:
+						secondaryApiKey && PROVIDER_ENV_VARS[factoryProvider]
+							? { [PROVIDER_ENV_VARS[factoryProvider]]: secondaryApiKey }
+							: {},
 					metadata: { requestId: requestId ?? "unknown" },
 					apiKey: secondaryApiKey,
 				});
@@ -322,7 +325,7 @@ export async function* runAgentInSandbox(
 		sigTermHandler = async () => {
 			await poolRef.killAll();
 		};
-		process.on("SIGTERM", sigTermHandler);
+		process.once("SIGTERM", sigTermHandler);
 	}
 
 	try {
@@ -398,7 +401,11 @@ export async function* runAgentInSandbox(
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
 				onStderr: (data: string) => {
-					_stderrBuffer += data;
+					if (_stderrBuffer.length + data.length > 500) {
+						_stderrBuffer = (_stderrBuffer + data).slice(-500);
+					} else {
+						_stderrBuffer += data;
+					}
 				},
 			})
 			.then(() => {
@@ -419,7 +426,11 @@ export async function* runAgentInSandbox(
 				if (!lineStr) continue;
 
 				// Intercept composite requests when pool is active
-				if (pool !== undefined && compositeNonce !== undefined) {
+				if (
+					pool !== undefined &&
+					compositeNonce !== undefined &&
+					lineStr.includes('"composite_request"')
+				) {
 					const compositeReq = parseCompositeRequest(lineStr);
 					if (compositeReq !== null) {
 						if (!validateNonce(compositeReq, compositeNonce)) {
@@ -457,7 +468,9 @@ export async function* runAgentInSandbox(
 							tmpPath,
 							serializeCompositeResponse(response),
 						);
-						await instance.commands.run(`mv '${tmpPath}' '${finalPath}'`);
+						await instance.commands.run(
+							`mv ${shellQuote(tmpPath)} ${shellQuote(finalPath)}`,
+						);
 
 						continue; // Do not yield composite requests as events
 					}
@@ -489,7 +502,7 @@ export async function* runAgentInSandbox(
 			const errMsg =
 				streamErr instanceof Error ? streamErr.message : String(streamErr);
 			const detail = _stderrBuffer.trim()
-				? `${errMsg}\nstderr: ${_stderrBuffer.trim().slice(0, 500)}`
+				? `${errMsg}\nstderr: ${_stderrBuffer.trim()}`
 				: errMsg;
 			yield {
 				type: "error",
@@ -646,18 +659,4 @@ async function handleCompositeRequest(
 			};
 		}
 	}
-}
-
-// ---------------------------------------------------------------------------
-// getProviderEnvKey — map provider name to env var key for credential injection
-// ---------------------------------------------------------------------------
-
-function getProviderEnvKey(provider: string): string {
-	const map: Record<string, string> = {
-		e2b: "E2B_API_KEY",
-		vercel: "VERCEL_TOKEN",
-		cloudflare: "CLOUDFLARE_API_TOKEN",
-		docker: "",
-	};
-	return map[provider] ?? "";
 }

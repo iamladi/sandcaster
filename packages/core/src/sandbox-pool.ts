@@ -1,3 +1,9 @@
+import {
+	MAX_FILE_BYTES,
+	MAX_TOTAL_BYTES,
+	shellQuote,
+	validateRelativePath,
+} from "./files.js";
 import type {
 	CommandOptions,
 	CommandResult,
@@ -31,45 +37,6 @@ export interface TransferResult {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const TRANSFER_PER_FILE_LIMIT = 25 * 1024 * 1024; // 25MB
-const TRANSFER_TOTAL_LIMIT = 50 * 1024 * 1024; // 50MB
-
-// ---------------------------------------------------------------------------
-// Path validation helper (mirrors files.ts validateRelativePath)
-// ---------------------------------------------------------------------------
-
-function validateRelativePath(raw: string): string {
-	if (
-		raw.startsWith("/") ||
-		raw.startsWith("\\") ||
-		/^[a-zA-Z]:[\\/]/.test(raw)
-	) {
-		throw new Error(`Absolute paths are not allowed: ${raw}`);
-	}
-
-	const parts = raw.replace(/\\/g, "/").split("/");
-	const stack: string[] = [];
-
-	for (const part of parts) {
-		if (part === "" || part === ".") {
-			// skip
-		} else if (part === "..") {
-			if (stack.length === 0) {
-				throw new Error(`Path traversal not allowed: ${raw}`);
-			}
-			stack.pop();
-		} else {
-			stack.push(part);
-		}
-	}
-
-	const normalized = stack.join("/");
-	if (!normalized) {
-		throw new Error(`Invalid path: ${raw}`);
-	}
-	return normalized;
-}
 
 // ---------------------------------------------------------------------------
 // Glob helpers
@@ -155,10 +122,6 @@ async function expandGlob(
 		validated.push(p);
 	}
 	return validated;
-}
-
-function shellQuote(s: string): string {
-	return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,14 +215,17 @@ export class SandboxPool {
 			);
 		}
 
-		const spawnPromise = this._factory(provider, template);
-		this._pendingSpawns.set(name, spawnPromise);
-
 		try {
-			const instance = await spawnPromise;
 			this._totalSpawnCount++;
+			const spawnPromise = this._factory(provider, template);
+			this._pendingSpawns.set(name, spawnPromise);
+
+			const instance = await spawnPromise;
 			this._secondary.set(name, { instance, provider, status: "active" });
 			return instance;
+		} catch (err) {
+			this._totalSpawnCount--;
+			throw err;
 		} finally {
 			this._pendingSpawns.delete(name);
 		}
@@ -338,7 +304,7 @@ export class SandboxPool {
 						? Buffer.byteLength(content, "utf8")
 						: content.byteLength;
 
-				if (byteSize > TRANSFER_PER_FILE_LIMIT) {
+				if (byteSize > MAX_FILE_BYTES) {
 					failed.push({
 						path: relativePath,
 						error: `File exceeds per-file limit of 25MB (${byteSize} bytes)`,
@@ -346,7 +312,7 @@ export class SandboxPool {
 					continue;
 				}
 
-				if (totalBytes + byteSize > TRANSFER_TOTAL_LIMIT) {
+				if (totalBytes + byteSize > MAX_TOTAL_BYTES) {
 					failed.push({
 						path: relativePath,
 						error: `Transfer would exceed total limit of 50MB`,
@@ -393,7 +359,7 @@ export class SandboxPool {
 	async killAll(): Promise<void> {
 		// Await any in-flight spawns, then kill their results
 		const pendingNames = Array.from(this._pendingSpawns.keys());
-		const pendingResults = await Promise.allSettled(
+		await Promise.allSettled(
 			pendingNames.map(async (name) => {
 				const p = this._pendingSpawns.get(name);
 				if (p) {
@@ -406,8 +372,6 @@ export class SandboxPool {
 				}
 			}),
 		);
-		// suppress unused warning
-		void pendingResults;
 
 		// Kill all secondaries in parallel
 		const secondaryKills = Array.from(this._secondary.values()).map(

@@ -1,4 +1,4 @@
-import type { CompositeResponse } from "../composite-ipc.js";
+import type { CompositeRequest, CompositeResponse } from "../composite-ipc.js";
 import { ipcResponsePath } from "../composite-ipc.js";
 
 export interface IpcClientDeps {
@@ -21,7 +21,7 @@ export class IpcClient {
 	) {}
 
 	async request(
-		action: string,
+		action: CompositeRequest["action"],
 		payload: Record<string, unknown>,
 	): Promise<CompositeResponse> {
 		const id = crypto.randomUUID();

@@ -24,14 +24,18 @@ vi.mock("node:fs", async (importOriginal) => {
 // Mock ./files.js — isolate sandbox orchestration from file helpers
 // ---------------------------------------------------------------------------
 
-vi.mock("../files.js", () => ({
-	uploadFiles: vi.fn().mockResolvedValue(undefined),
-	uploadSkills: vi.fn().mockResolvedValue(undefined),
-	createExtractionMarker: vi
-		.fn()
-		.mockResolvedValue("/tmp/sandcaster-extract-test.marker"),
-	extractGeneratedFiles: vi.fn().mockResolvedValue([]),
-}));
+vi.mock("../files.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../files.js")>();
+	return {
+		...actual,
+		uploadFiles: vi.fn().mockResolvedValue(undefined),
+		uploadSkills: vi.fn().mockResolvedValue(undefined),
+		createExtractionMarker: vi
+			.fn()
+			.mockResolvedValue("/tmp/sandcaster-extract-test.marker"),
+		extractGeneratedFiles: vi.fn().mockResolvedValue([]),
+	};
+});
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
