@@ -162,6 +162,13 @@ export const QueryRequestSchema = z.object({
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
 	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
+	composite: z
+		.object({
+			maxSandboxes: z.int().gte(1).optional(),
+			maxTotalSpawns: z.int().gte(1).optional(),
+			allowedProviders: z.array(z.enum(SANDBOX_PROVIDER_VALUES)).optional(),
+		})
+		.optional(),
 });
 
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
@@ -194,6 +201,16 @@ export const SandcasterConfigSchema = z.object({
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
 	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
+	composite: z
+		.object({
+			maxSandboxes: z.int().gte(1).lte(20).default(3),
+			maxTotalSpawns: z.int().gte(1).lte(100).default(10),
+			allowedProviders: z
+				.array(z.enum(SANDBOX_PROVIDER_VALUES))
+				.default([...SANDBOX_PROVIDER_VALUES]),
+			pollIntervalMs: z.int().gte(10).lte(1000).default(50),
+		})
+		.optional(),
 });
 
 export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;
