@@ -135,8 +135,9 @@ async function expandGlob(
 	instance: SandboxInstance,
 	pattern: string,
 ): Promise<string[]> {
+	const wd = shellQuote(instance.workDir);
 	const { stdout } = await instance.commands.run(
-		`find ${instance.workDir} -type f | sed "s|${instance.workDir}/||"`,
+		`find ${wd} -type f | sed "s|${instance.workDir}/||"`,
 	);
 
 	const allFiles = stdout
@@ -145,7 +146,19 @@ async function expandGlob(
 		.filter(Boolean);
 
 	const regex = globToRegex(pattern);
-	return allFiles.filter((f) => regex.test(f));
+	const matched = allFiles.filter((f) => regex.test(f));
+
+	// Validate expanded paths to prevent traversal via crafted filenames
+	const validated: string[] = [];
+	for (const p of matched) {
+		validateRelativePath(p); // throws on traversal/absolute
+		validated.push(p);
+	}
+	return validated;
+}
+
+function shellQuote(s: string): string {
+	return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +229,7 @@ export class SandboxPool {
 			throw new Error(`Sandbox name "primary" is reserved`);
 		}
 
-		if (this._secondary.has(name)) {
+		if (this._secondary.has(name) || this._pendingSpawns.has(name)) {
 			throw new Error(`Sandbox with name "${name}" already exists`);
 		}
 
@@ -240,15 +253,12 @@ export class SandboxPool {
 
 		const spawnPromise = this._factory(provider, template);
 		this._pendingSpawns.set(name, spawnPromise);
-		this._totalSpawnCount++;
 
 		try {
 			const instance = await spawnPromise;
+			this._totalSpawnCount++;
 			this._secondary.set(name, { instance, provider, status: "active" });
 			return instance;
-		} catch (err) {
-			this._pendingSpawns.delete(name);
-			throw err;
 		} finally {
 			this._pendingSpawns.delete(name);
 		}
