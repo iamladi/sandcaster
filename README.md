@@ -16,7 +16,7 @@ Sandcaster is a TypeScript rewrite of [Sandstorm](https://github.com/tomascupr/s
 - Research Acme's competitors, crawl their sites and recent news, and write a one-page branded briefing PDF with sources
 - Analyze uploaded transcripts or PDFs
 - Triage incoming support tickets
-- Run a security audit with coordinated sub-agents
+- Run a security audit with coordinated sub-agents across multiple sandboxes
 - Turn docs into a draft OpenAPI spec
 
 ## Terminal demo
@@ -97,6 +97,7 @@ Sandcaster is opinionated about the missing middle:
 - config-driven behavior through `sandcaster.json`
 - multi-model support across Anthropic, OpenAI, Google, and OpenRouter
 - sub-agent orchestration with configurable tools and models per agent
+- composite sandboxes: agent-driven multi-sandbox orchestration across providers
 - skills system for reusable domain knowledge
 
 ## Why not wire the SDK yourself?
@@ -110,6 +111,7 @@ Sandcaster is opinionated about the missing middle:
 | `sandcaster.json` config layer | Built in | No | Custom work |
 | Multi-model with auto-detection | Built in | No | Custom work |
 | Sub-agent orchestration | Built in | No | Custom work |
+| Composite multi-sandbox orchestration | Built in | No | Custom work |
 | Skills system (SKILL.md) | Built in | No | Custom work |
 | Structured JSON output schemas | Built in | Manual wiring | Custom work |
 | Slack bot integration | Built in | No | Custom work |
@@ -134,6 +136,7 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 | Models | Claude (multi-cloud + OpenRouter) | Anthropic, OpenAI, Google, OpenRouter |
 | Sandbox providers | E2B only | E2B, Vercel, Docker, Cloudflare |
 | Thinking levels | No | none / low / medium / high |
+| Multi-sandbox | No | Composite sandboxes with cross-provider orchestration |
 
 ## Architecture
 
@@ -141,7 +144,8 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 sandcaster/
 ├── packages/
 │   ├── core               @sandcaster/core — schemas, config, sandbox orchestration, runner
-│   │   └── providers/     E2B, Vercel, Docker, Cloudflare sandbox implementations
+│   │   ├── providers/     E2B, Vercel, Docker, Cloudflare sandbox implementations
+│   │   └── runner/        In-sandbox runner, IPC client, composite tools
 │   ├── sdk                @sandcaster/sdk — standalone TypeScript client
 │   ├── cloudflare-worker  Cloudflare Worker proxy for sandbox operations
 │   └── ts-config          @sandcaster/ts-config — shared TypeScript configs
@@ -160,12 +164,17 @@ sandcaster "prompt" -f report.pdf
   ├─ Load sandcaster.json + .env
   ├─ Resolve model (alias or auto-detect from API keys)
   ├─ Resolve sandbox provider (config > env auto-detect > docker > e2b)
-  ├─ Create sandbox (E2B / Vercel / Docker / Cloudflare)
+  ├─ Create primary sandbox (E2B / Vercel / Docker / Cloudflare)
   ├─ Upload runner, config, user files, skills
   ├─ Execute: node /opt/sandcaster/runner.mjs
   ├─ Stream JSON-line events → TUI / SSE
+  │   └─ [composite] Intercept IPC requests from runner
+  │       ├─ spawn_sandbox → SandboxPool creates secondary sandbox
+  │       ├─ exec_in → run command in named sandbox
+  │       ├─ transfer_files → copy files between sandboxes
+  │       └─ kill_sandbox → tear down named sandbox
   ├─ Extract generated artifacts
-  └─ Kill sandbox
+  └─ Kill all sandboxes (secondaries first, primary last)
 ```
 
 ## Multi-model support
@@ -202,6 +211,64 @@ Auto-detection priority: `E2B_API_KEY` > `VERCEL_TOKEN` > Cloudflare env vars > 
 {
   "sandboxProvider": "docker"
 }
+```
+
+## Composite sandboxes
+
+Agents can dynamically spawn, coordinate, and tear down multiple sandboxes during a single run. This enables workflows like running a security scanner in one sandbox while building in another, or parallelizing work across providers.
+
+Composite mode activates automatically when the primary sandbox supports it (requires `fileSystem` + `shellExec` capabilities — E2B and Docker). The agent gets five additional tools:
+
+| Tool | Description |
+|------|-------------|
+| `spawn_sandbox` | Create a new sandbox by name and provider |
+| `exec_in` | Run a shell command in a named sandbox |
+| `transfer_files` | Copy files between sandboxes (supports globs) |
+| `kill_sandbox` | Tear down a named sandbox |
+| `list_sandboxes` | List all active sandboxes in the session |
+
+Communication between the runner (inside the primary sandbox) and the host uses a nonce-authenticated file-based IPC protocol. The host intercepts requests from the runner's stdout, executes them against the SandboxPool, and writes responses back via atomic file rename.
+
+### Guardrails
+
+Config sets the ceiling. Per-request overrides can only tighten limits, never broaden them.
+
+| Guardrail | Default | Config key |
+|-----------|---------|------------|
+| Max concurrent sandboxes | 3 | `composite.maxSandboxes` (1-20) |
+| Max total spawns per session | 10 | `composite.maxTotalSpawns` (1-100) |
+| Allowed providers | all | `composite.allowedProviders` |
+| IPC poll interval | 50ms | `composite.pollIntervalMs` (10-1000) |
+
+File transfers enforce per-file (25MB) and total (50MB) size limits with path traversal protection.
+
+### Cleanup
+
+All secondary sandboxes are killed automatically when the run completes (secondaries first, primary last). A `SIGTERM` handler ensures cleanup on graceful shutdown.
+
+### Example config
+
+```json
+{
+  "sandboxProvider": "e2b",
+  "composite": {
+    "maxSandboxes": 5,
+    "maxTotalSpawns": 20,
+    "allowedProviders": ["e2b", "docker"]
+  }
+}
+```
+
+### Per-request override (SDK / API)
+
+```typescript
+const events = client.query({
+  prompt: "Run security scan in a Docker sandbox, build in E2B",
+  composite: {
+    maxSandboxes: 2,
+    allowedProviders: ["e2b", "docker"]
+  }
+});
 ```
 
 ## SDK
@@ -260,7 +327,12 @@ sandcaster serve --port 8000
   },
   "provider": "anthropic",
   "sandboxProvider": "e2b",
-  "thinkingLevel": "medium"
+  "thinkingLevel": "medium",
+  "composite": {
+    "maxSandboxes": 3,
+    "maxTotalSpawns": 10,
+    "allowedProviders": ["e2b", "docker"]
+  }
 }
 ```
 
