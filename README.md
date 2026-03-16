@@ -4,7 +4,7 @@ Open-source runtime for general-purpose AI agents in isolated sandboxes.
 
 CLI, API, TypeScript SDK, and Slack with streaming, file uploads, and config-driven behavior.
 
-Built on [Pi-mono](https://github.com/badlogic/pi-mono) for multi-provider LLM orchestration and pluggable sandbox backends ([E2B](https://e2b.dev), [Vercel](https://vercel.com/docs/sandbox), Docker, Cloudflare Workers).
+Built on [Pi-mono](https://github.com/badlogic/pi-mono) for multi-provider LLM orchestration and pluggable sandbox backends ([E2B](https://e2b.dev), [Vercel](https://vercel.com/docs/sandbox), Docker, [Cloudflare Containers](https://developers.cloudflare.com/containers/)).
 
 [![CI](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue.svg)](https://www.typescriptlang.org/)
@@ -144,7 +144,7 @@ Sandcaster is a ground-up TypeScript rewrite, not a port. Key differences:
 sandcaster/
 ├── packages/
 │   ├── core               @sandcaster/core — schemas, config, sandbox orchestration, runner
-│   │   ├── providers/     E2B, Vercel, Docker, Cloudflare sandbox implementations
+│   │   ├── providers/     E2B, Vercel, Docker, Cloudflare Containers implementations
 │   │   └── runner/        In-sandbox runner, IPC client, composite tools
 │   ├── sdk                @sandcaster/sdk — standalone TypeScript client
 │   ├── cloudflare-worker  Cloudflare Worker proxy for sandbox operations
@@ -203,7 +203,7 @@ Sandcaster supports multiple sandbox backends. Set `sandboxProvider` in `sandcas
 | `e2b` | `E2B_API_KEY` | Cloud sandbox with custom templates, streaming, reconnect |
 | `vercel` | `VERCEL_TOKEN` | Vercel Sandbox with snapshot support and streaming |
 | `docker` | Local daemon or `DOCKER_HOST` | Local development, no cloud account needed |
-| `cloudflare` | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_SANDBOX_WORKER_URL` | Edge-based sandbox via Cloudflare Workers |
+| `cloudflare` | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_SANDBOX_WORKER_URL` | Edge-based sandbox via Cloudflare Containers |
 
 Auto-detection priority: `E2B_API_KEY` > `VERCEL_TOKEN` > Cloudflare env vars > Docker socket > E2B (fallback).
 
