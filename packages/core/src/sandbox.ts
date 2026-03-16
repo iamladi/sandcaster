@@ -267,6 +267,7 @@ export async function* runAgentInSandbox(
 	let pool: SandboxPool | undefined;
 	let compositeNonce: string | undefined;
 	let resolvedComposite: ReturnType<typeof resolveCompositeConfig> | undefined;
+	let sigTermHandler: (() => Promise<void>) | undefined;
 
 	if (compositeActive) {
 		resolvedComposite = resolveCompositeConfig(
@@ -315,6 +316,14 @@ export async function* runAgentInSandbox(
 
 		// Stale IPC cleanup
 		await instance.commands.run(`rm -f /tmp/sandcaster-ipc-*.json*`);
+
+		// Register SIGTERM handler for graceful cleanup
+		const poolRef = pool;
+		sigTermHandler = async () => {
+			await poolRef.killAll();
+			process.exit(143); // 128 + 15 (SIGTERM)
+		};
+		process.on("SIGTERM", sigTermHandler);
 	}
 
 	try {
@@ -449,6 +458,17 @@ export async function* runAgentInSandbox(
 
 				try {
 					const event = JSON.parse(lineStr) as SandcasterEvent;
+					// Tag tool_use / tool_result events with sandbox: "primary" when
+					// composite is active. If the event already has a sandbox field,
+					// preserve it (don't overwrite).
+					if (compositeActive) {
+						if (
+							(event.type === "tool_use" || event.type === "tool_result") &&
+							event.sandbox === undefined
+						) {
+							(event as typeof event & { sandbox: string }).sandbox = "primary";
+						}
+					}
 					yield event;
 				} catch {
 					yield {
@@ -494,6 +514,12 @@ export async function* runAgentInSandbox(
 		// ------------------------------------------------------------------
 		// 12. Kill sandbox (always, guaranteed cleanup — FR-9)
 		// ------------------------------------------------------------------
+
+		// Remove SIGTERM handler to prevent leaks
+		if (sigTermHandler !== undefined) {
+			process.off("SIGTERM", sigTermHandler);
+		}
+
 		if (pool !== undefined) {
 			await pool.killAll();
 		} else {

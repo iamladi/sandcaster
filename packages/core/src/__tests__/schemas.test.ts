@@ -647,6 +647,88 @@ describe("SandcasterEventSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
+// SandcasterEventSchema — sandbox field on tool_use and tool_result
+// ---------------------------------------------------------------------------
+
+describe("SandcasterEventSchema — sandbox field", () => {
+	it("tool_use event accepts an optional sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+			sandbox: "primary",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBe("primary");
+		}
+	});
+
+	it("tool_use event is valid without the sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBeUndefined();
+		}
+	});
+
+	it("tool_use event accepts an arbitrary sandbox name string", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "exec_in",
+			content: "{}",
+			sandbox: "worker-1",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBe("worker-1");
+		}
+	});
+
+	it("tool_result event accepts an optional sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "bash",
+			sandbox: "primary",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBe("primary");
+		}
+	});
+
+	it("tool_result event is valid without the sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "bash",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBeUndefined();
+		}
+	});
+
+	it("tool_result event accepts an arbitrary sandbox name string", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "exec_in",
+			sandbox: "worker-2",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBe("worker-2");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
 // RunSchema
 // ---------------------------------------------------------------------------
 

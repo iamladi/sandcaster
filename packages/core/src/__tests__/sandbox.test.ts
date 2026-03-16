@@ -1007,6 +1007,171 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		expect(instance.kill).toHaveBeenCalledOnce();
 	});
 
+	it("tags tool_use events with sandbox: 'primary' when composite is active", async () => {
+		const toolUseEvent = {
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+		};
+		const instance = makeCompositeInstance([JSON.stringify(toolUseEvent)]);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; sandbox?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			events.push(event as { type: string; sandbox?: string });
+		}
+
+		const toolUse = events.find((e) => e.type === "tool_use");
+		expect(toolUse).toBeDefined();
+		expect(toolUse?.sandbox).toBe("primary");
+	});
+
+	it("tags tool_result events with sandbox: 'primary' when composite is active", async () => {
+		const toolResultEvent = {
+			type: "tool_result",
+			content: "file listing",
+			toolName: "bash",
+		};
+		const instance = makeCompositeInstance([JSON.stringify(toolResultEvent)]);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; sandbox?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			events.push(event as { type: string; sandbox?: string });
+		}
+
+		const toolResult = events.find((e) => e.type === "tool_result");
+		expect(toolResult).toBeDefined();
+		expect(toolResult?.sandbox).toBe("primary");
+	});
+
+	it("does NOT tag tool_use events with sandbox when composite is NOT active", async () => {
+		const toolUseEvent = {
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+		};
+		const instance = makeFakeInstance([JSON.stringify(toolUseEvent)]);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; sandbox?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(), // no composite
+		})) {
+			events.push(event as { type: string; sandbox?: string });
+		}
+
+		const toolUse = events.find((e) => e.type === "tool_use");
+		expect(toolUse).toBeDefined();
+		expect(toolUse?.sandbox).toBeUndefined();
+	});
+
+	it("does NOT tag tool_result events with sandbox when composite is NOT active", async () => {
+		const toolResultEvent = {
+			type: "tool_result",
+			content: "output",
+			toolName: "bash",
+		};
+		const instance = makeFakeInstance([JSON.stringify(toolResultEvent)]);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; sandbox?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(), // no composite
+		})) {
+			events.push(event as { type: string; sandbox?: string });
+		}
+
+		const toolResult = events.find((e) => e.type === "tool_result");
+		expect(toolResult).toBeDefined();
+		expect(toolResult?.sandbox).toBeUndefined();
+	});
+
+	it("does NOT overwrite an existing sandbox field on tool_use events", async () => {
+		// If the event already carries a sandbox label, we should keep it.
+		// (The spec says tag when composite active — if already set we pass through.)
+		const toolUseEvent = {
+			type: "tool_use",
+			toolName: "exec_in",
+			content: "{}",
+			sandbox: "worker-1",
+		};
+		const instance = makeCompositeInstance([JSON.stringify(toolUseEvent)]);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; sandbox?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			events.push(event as { type: string; sandbox?: string });
+		}
+
+		const toolUse = events.find((e) => e.type === "tool_use");
+		expect(toolUse).toBeDefined();
+		// Existing sandbox label is preserved (not overwritten with "primary")
+		expect(toolUse?.sandbox).toBe("worker-1");
+	});
+
+	it("registers a SIGTERM handler when composite is active", async () => {
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		const onSpy = vi.spyOn(process, "on");
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		const sigtermCall = onSpy.mock.calls.find((call) => call[0] === "SIGTERM");
+		expect(sigtermCall).toBeDefined();
+
+		onSpy.mockRestore();
+	});
+
+	it("does NOT register a SIGTERM handler when composite is NOT active", async () => {
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
+
+		const onSpy = vi.spyOn(process, "on");
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(), // no composite
+		})) {
+			// consume
+		}
+
+		const sigtermCall = onSpy.mock.calls.find((call) => call[0] === "SIGTERM");
+		expect(sigtermCall).toBeUndefined();
+
+		onSpy.mockRestore();
+	});
+
+	it("removes the SIGTERM handler after the run completes (no leak)", async () => {
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		const offSpy = vi.spyOn(process, "off");
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		const sigtermOffCall = offSpy.mock.calls.find(
+			(call) => call[0] === "SIGTERM",
+		);
+		expect(sigtermOffCall).toBeDefined();
+
+		offSpy.mockRestore();
+	});
+
 	it("handles spawn composite_request and responds with workDir", async () => {
 		let capturedNonce: string | undefined;
 		const primaryInstance = makeCompositeInstance([]);
