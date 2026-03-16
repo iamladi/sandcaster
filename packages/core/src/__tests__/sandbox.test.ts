@@ -691,3 +691,408 @@ describe("runAgentInSandbox", () => {
 		expect(err).toBeInstanceOf(Error);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Composite sandbox orchestration
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a fake instance that streams specific lines from the runner, and for
+ * non-runner commands (like IPC mv) returns a default result immediately.
+ */
+function makeCompositeInstance(runnerLines: string[]): SandboxInstance & {
+	files: { write: ReturnType<typeof vi.fn>; read: ReturnType<typeof vi.fn> };
+	commands: { run: ReturnType<typeof vi.fn> };
+	kill: ReturnType<typeof vi.fn>;
+} {
+	const runFn = vi.fn().mockImplementation(
+		async (
+			cmd: string,
+			opts?: {
+				onStdout?: (data: string) => void;
+				onStderr?: (data: string) => void;
+			},
+		) => {
+			if (cmd.startsWith("node ")) {
+				for (const line of runnerLines) {
+					opts?.onStdout?.(`${line}\n`);
+				}
+			}
+			// mv, rm -f, and other shell commands return immediately with success
+			return { stdout: "", stderr: "", exitCode: 0 };
+		},
+	);
+
+	return {
+		workDir: "/home/user",
+		capabilities: {
+			fileSystem: true,
+			shellExec: true,
+			envInjection: true,
+			streaming: true,
+			networkPolicy: false,
+			snapshots: false,
+			reconnect: false,
+			customImage: false,
+		},
+		files: {
+			write: vi.fn().mockResolvedValue(undefined),
+			read: vi.fn().mockResolvedValue(""),
+		},
+		commands: { run: runFn },
+		kill: vi.fn().mockResolvedValue(undefined),
+	};
+}
+
+describe("runAgentInSandbox — composite orchestration", () => {
+	beforeEach(() => {
+		resetRegistry();
+		process.env.E2B_API_KEY = "test-e2b-key";
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("injects composite_nonce and composite_enabled into agent_config.json when composite is active", async () => {
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({
+				composite: { maxSandboxes: 2 },
+			}),
+		})) {
+			// consume
+		}
+
+		const configWriteCall = instance.files.write.mock.calls.find(
+			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
+		) as string[];
+		expect(configWriteCall).toBeDefined();
+
+		const written = JSON.parse(configWriteCall[1]);
+		expect(written.composite_enabled).toBe(true);
+		expect(typeof written.composite_nonce).toBe("string");
+		expect(written.composite_nonce.length).toBeGreaterThan(0);
+		expect(typeof written.composite_poll_interval_ms).toBe("number");
+	});
+
+	it("does NOT inject composite fields into agent_config.json when composite is not configured", async () => {
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			// consume
+		}
+
+		const configWriteCall = instance.files.write.mock.calls.find(
+			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
+		) as string[];
+		expect(configWriteCall).toBeDefined();
+
+		const written = JSON.parse(configWriteCall[1]);
+		expect(written.composite_enabled).toBeUndefined();
+		expect(written.composite_nonce).toBeUndefined();
+	});
+
+	it("intercepts composite_request lines and does not yield them as events", async () => {
+		const _nonce = "test-nonce-intercepted";
+
+		// We need to capture the actual nonce injected, then use it in the request.
+		// Since we can't know the nonce ahead of time, we patch the module's generateNonce.
+		// Instead, register a provider that captures the agent_config and emits IPC
+		// lines matching the nonce that was written.
+		let capturedNonce: string | undefined;
+		const instance = makeCompositeInstance([]);
+
+		// Override the write mock so we capture the nonce from agent_config
+		instance.files.write.mockImplementation(
+			async (path: string, content: string) => {
+				if (path === "/opt/sandcaster/agent_config.json") {
+					const parsed = JSON.parse(content);
+					capturedNonce = parsed.composite_nonce;
+					// Now override the runner command to emit a composite request with the right nonce
+					instance.commands.run.mockImplementation(
+						async (
+							cmd: string,
+							opts?: { onStdout?: (data: string) => void },
+						) => {
+							if (cmd.startsWith("node ")) {
+								if (capturedNonce) {
+									const ipcReq = JSON.stringify({
+										type: "composite_request",
+										id: "ipc-req-001",
+										nonce: capturedNonce,
+										action: "list",
+									});
+									opts?.onStdout?.(`${ipcReq}\n`);
+								}
+								// Also emit a regular event after the IPC request
+								opts?.onStdout?.(
+									`${JSON.stringify({ type: "result", content: "done" })}\n`,
+								);
+							}
+							return { stdout: "", stderr: "", exitCode: 0 };
+						},
+					);
+				}
+			},
+		);
+
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			events.push(event);
+		}
+
+		// The composite_request line should NOT appear as an event
+		const compositeEvents = events.filter(
+			(e) => (e as unknown as { type: string }).type === "composite_request",
+		);
+		expect(compositeEvents).toHaveLength(0);
+
+		// The regular result event should still be yielded
+		const resultEvent = events.find((e) => e.type === "result");
+		expect(resultEvent).toBeDefined();
+	});
+
+	it("writes IPC response via atomic write-rename when composite request is handled", async () => {
+		let capturedNonce: string | undefined;
+		const instance = makeCompositeInstance([]);
+
+		instance.files.write.mockImplementation(
+			async (path: string, content: string) => {
+				if (path === "/opt/sandcaster/agent_config.json") {
+					capturedNonce = JSON.parse(content).composite_nonce;
+					instance.commands.run.mockImplementation(
+						async (
+							cmd: string,
+							opts?: { onStdout?: (data: string) => void },
+						) => {
+							if (cmd.startsWith("node ") && capturedNonce) {
+								const ipcReq = JSON.stringify({
+									type: "composite_request",
+									id: "ipc-req-002",
+									nonce: capturedNonce,
+									action: "list",
+								});
+								opts?.onStdout?.(`${ipcReq}\n`);
+							}
+							return { stdout: "", stderr: "", exitCode: 0 };
+						},
+					);
+				}
+			},
+		);
+
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		// Should have written to the .tmp path
+		const tempWriteCall = instance.files.write.mock.calls.find(
+			(call: string[]) =>
+				typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
+		);
+		expect(tempWriteCall).toBeDefined();
+
+		// Should have run mv from .tmp to .json
+		const mvCall = instance.commands.run.mock.calls.find(
+			(call: string[]) =>
+				typeof call[0] === "string" && call[0].startsWith("mv "),
+		);
+		expect(mvCall).toBeDefined();
+		expect(mvCall?.[0]).toContain(".json.tmp");
+		expect(mvCall?.[0]).toContain(".json");
+	});
+
+	it("rejects composite_request with invalid nonce and does not write IPC response", async () => {
+		const instance = makeCompositeInstance([]);
+
+		instance.files.write.mockImplementation(
+			async (path: string, _content: string) => {
+				if (path === "/opt/sandcaster/agent_config.json") {
+					// Emit a composite request with a WRONG nonce
+					instance.commands.run.mockImplementation(
+						async (
+							cmd: string,
+							opts?: { onStdout?: (data: string) => void },
+						) => {
+							if (cmd.startsWith("node ")) {
+								const ipcReq = JSON.stringify({
+									type: "composite_request",
+									id: "ipc-req-003",
+									nonce: "WRONG-NONCE",
+									action: "list",
+								});
+								opts?.onStdout?.(`${ipcReq}\n`);
+							}
+							return { stdout: "", stderr: "", exitCode: 0 };
+						},
+					);
+				}
+			},
+		);
+
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		// Should NOT have written any .tmp IPC file (nonce rejected)
+		const tempWriteCall = instance.files.write.mock.calls.find(
+			(call: string[]) =>
+				typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
+		);
+		expect(tempWriteCall).toBeUndefined();
+	});
+
+	it("cleans up stale IPC files at pool initialization", async () => {
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		// Should have run the rm -f cleanup command
+		const cleanupCall = instance.commands.run.mock.calls.find(
+			(call: string[]) =>
+				typeof call[0] === "string" &&
+				call[0].includes("rm -f") &&
+				call[0].includes("sandcaster-ipc"),
+		);
+		expect(cleanupCall).toBeDefined();
+	});
+
+	it("calls pool.killAll() in finally when composite is active", async () => {
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		// With composite active, pool.killAll() kills the primary instance
+		expect(instance.kill).toHaveBeenCalledOnce();
+	});
+
+	it("still kills sandbox via instance.kill() when composite is NOT active", async () => {
+		const instance = makeFakeInstance([]);
+		registerFakeProvider(instance);
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest(), // no composite
+		})) {
+			// consume
+		}
+
+		expect(instance.kill).toHaveBeenCalledOnce();
+	});
+
+	it("handles spawn composite_request and responds with workDir", async () => {
+		let capturedNonce: string | undefined;
+		const primaryInstance = makeCompositeInstance([]);
+
+		// Secondary instance returned when the factory spawns a new sandbox
+		const secondaryWorkDir = "/home/worker";
+		const secondaryInstance: SandboxInstance = {
+			workDir: secondaryWorkDir,
+			capabilities: {
+				fileSystem: true,
+				shellExec: true,
+				envInjection: true,
+				streaming: true,
+				networkPolicy: false,
+				snapshots: false,
+				reconnect: false,
+				customImage: false,
+			},
+			files: {
+				write: vi.fn().mockResolvedValue(undefined),
+				read: vi.fn().mockResolvedValue(""),
+			},
+			commands: {
+				run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
+			},
+			kill: vi.fn().mockResolvedValue(undefined),
+		};
+
+		primaryInstance.files.write.mockImplementation(
+			async (path: string, content: string) => {
+				if (path === "/opt/sandcaster/agent_config.json") {
+					capturedNonce = JSON.parse(content).composite_nonce;
+					// Override runner to emit a spawn IPC request with the captured nonce
+					primaryInstance.commands.run.mockImplementation(
+						async (
+							cmd: string,
+							opts?: { onStdout?: (data: string) => void },
+						) => {
+							if (cmd.startsWith("node ") && capturedNonce) {
+								const ipcReq = JSON.stringify({
+									type: "composite_request",
+									id: "ipc-spawn-001",
+									nonce: capturedNonce,
+									action: "spawn",
+									name: "worker",
+									provider: "e2b",
+								});
+								opts?.onStdout?.(`${ipcReq}\n`);
+							}
+							return { stdout: "", stderr: "", exitCode: 0 };
+						},
+					);
+				}
+			},
+		);
+
+		// Register provider: first create() call returns primaryInstance (for the
+		// runAgentInSandbox initial sandbox creation), subsequent calls return
+		// secondaryInstance (when pool.spawn triggers the factory).
+		let createCallCount = 0;
+		registerSandboxProvider("e2b", async () => ({
+			name: "e2b" as const,
+			create: async () => {
+				createCallCount++;
+				if (createCallCount === 1) {
+					return { ok: true as const, instance: primaryInstance };
+				}
+				return { ok: true as const, instance: secondaryInstance };
+			},
+		}));
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		// The IPC response written to .tmp should contain workDir of secondary
+		const tmpWriteCall = primaryInstance.files.write.mock.calls.find(
+			(call: string[]) =>
+				typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
+		);
+		expect(tmpWriteCall).toBeDefined();
+		// biome-ignore lint/style/noNonNullAssertion: asserted defined above
+		const responsePayload = JSON.parse(tmpWriteCall![1]);
+		expect(responsePayload.ok).toBe(true);
+		expect(responsePayload.workDir).toBe(secondaryWorkDir);
+	});
+});
