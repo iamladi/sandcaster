@@ -496,7 +496,14 @@ describe("composite-integration", () => {
 
 			for await (const _ of runAgentInSandbox({
 				request: makeRequest({ composite: { maxSandboxes: 2 } }),
-				config: { composite: { maxSandboxes: 5 } },
+				config: {
+					composite: {
+						maxSandboxes: 5,
+						maxTotalSpawns: 10,
+						allowedProviders: ["e2b", "docker", "vercel", "cloudflare"],
+						pollIntervalMs: 50,
+					},
+				},
 			})) {
 				// consume
 			}
