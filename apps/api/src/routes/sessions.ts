@@ -1,6 +1,5 @@
 import type { SessionManager } from "@sandcaster/core";
 import {
-	executeCommand,
 	loadConfig,
 	parseSessionCommand,
 	SessionCreateRequestSchema,
@@ -94,26 +93,36 @@ export function registerSessionRoutes(
 			);
 		}
 
-		// Check if the prompt is a slash-command
+		// Check if the prompt is a slash-command — execute via SessionManager (mutex-protected)
 		const command = parseSessionCommand(parsed.data.prompt);
 		if (command) {
-			const activeSession = sessionManager.getActiveSession(sessionId);
-			if (!activeSession) {
-				return c.json(
-					{ error: "Session not found", code: "SESSION_NOT_FOUND" },
-					404,
+			try {
+				const events = sessionManager.handleCommand(
+					sessionId,
+					parsed.data.prompt,
 				);
-			}
-
-			return streamSSE(c, async (stream) => {
-				c.header("Content-Encoding", "Identity");
-				for await (const event of executeCommand(activeSession, command)) {
-					await stream.writeSSE({
-						event: event.type,
-						data: JSON.stringify(event),
-					});
+				return streamSSE(c, async (stream) => {
+					c.header("Content-Encoding", "Identity");
+					for await (const event of events) {
+						await stream.writeSSE({
+							event: event.type,
+							data: JSON.stringify(event),
+						});
+					}
+				});
+			} catch (err) {
+				if (err instanceof SessionError) {
+					const statusMap: Record<string, number> = {
+						SESSION_BUSY: 409,
+						SESSION_NOT_FOUND: 404,
+					};
+					return c.json(
+						{ error: err.message, code: err.code },
+						(statusMap[err.code] ?? 500) as 409 | 404 | 500,
+					);
 				}
-			});
+				throw err;
+			}
 		}
 
 		try {
@@ -194,26 +203,40 @@ export function registerSessionRoutes(
 
 			const pending: Array<import("@sandcaster/core").SandcasterEvent> = [];
 			let notify: (() => void) | null = null;
+			let closed = false;
 
 			const clientFn = (
 				event: import("@sandcaster/core").SandcasterEvent,
 			): boolean => {
+				if (closed) return false;
 				pending.push(event);
 				notify?.();
 				return true;
 			};
 			activeSession.clients.add(clientFn);
 
+			// Listen for client disconnect to unblock the drain loop
+			const abortSignal = c.req.raw.signal;
+			const onAbort = () => {
+				closed = true;
+				notify?.();
+			};
+			abortSignal.addEventListener("abort", onAbort, { once: true });
+
 			const heartbeat = setInterval(async () => {
 				try {
-					await stream.writeSSE({ event: "ping", data: "" });
+					if (!closed) {
+						await stream.writeSSE({ event: "ping", data: "" });
+					}
 				} catch {
+					closed = true;
 					clearInterval(heartbeat);
+					notify?.();
 				}
 			}, 15_000);
 
 			try {
-				while (true) {
+				while (!closed) {
 					if (pending.length > 0) {
 						// biome-ignore lint/style/noNonNullAssertion: length checked
 						const event = pending.shift()!;
@@ -232,7 +255,9 @@ export function registerSessionRoutes(
 					}
 				}
 			} finally {
+				closed = true;
 				clearInterval(heartbeat);
+				abortSignal.removeEventListener("abort", onAbort);
 				activeSession.clients.delete(clientFn);
 			}
 		});

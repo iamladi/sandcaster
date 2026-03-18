@@ -96,6 +96,8 @@ function sessionRecordToSession(record: SessionRecord): Session {
  * Eagerly runs an async generator and returns a buffered pull generator.
  * The inner generator starts executing immediately (not lazily).
  */
+const MAX_EAGER_BUFFER = 1000;
+
 function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 	const buffer: T[] = [];
 	let done = false;
@@ -106,7 +108,10 @@ function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 	(async () => {
 		try {
 			for await (const item of source) {
-				buffer.push(item);
+				// Cap buffer to prevent unbounded memory growth
+				if (buffer.length < MAX_EAGER_BUFFER) {
+					buffer.push(item);
+				}
 				notify?.();
 				notify = undefined;
 			}
@@ -359,6 +364,9 @@ export class SessionManager {
 		await mutex.acquire();
 
 		try {
+			// Re-check after lock — expire may have already cleaned up
+			if (!this.activeSessions.has(sessionId)) return;
+
 			this._clearIdleTimer(sessionId);
 
 			if (activeSession.instance) {
@@ -407,6 +415,42 @@ export class SessionManager {
 
 	getActiveSession(sessionId: string): ActiveSession | undefined {
 		return this.activeSessions.get(sessionId);
+	}
+
+	// -------------------------------------------------------------------------
+	// handleCommand — mutex-protected command execution
+	// -------------------------------------------------------------------------
+
+	async *handleCommand(
+		sessionId: string,
+		prompt: string,
+	): AsyncGenerator<SandcasterEvent> {
+		const { parseSessionCommand, executeCommand } = await import(
+			"./commands.js"
+		);
+		const command = parseSessionCommand(prompt);
+		if (!command) return;
+
+		const activeSession = this.activeSessions.get(sessionId);
+		if (!activeSession) {
+			throw new SessionError(
+				`Session ${sessionId} not found`,
+				"SESSION_NOT_FOUND",
+			);
+		}
+
+		const mutex = this._getMutex(sessionId);
+		if (!mutex.tryAcquire()) {
+			throw new SessionError(`Session ${sessionId} is busy`, "SESSION_BUSY");
+		}
+
+		try {
+			yield* executeCommand(activeSession, command, {
+				summarizer: this.opts.summarizer,
+			});
+		} finally {
+			mutex.release();
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -470,6 +514,9 @@ export class SessionManager {
 		await mutex.acquire();
 
 		try {
+			// Re-check after lock — delete may have already cleaned up
+			if (!this.activeSessions.has(sessionId)) return;
+
 			if (activeSession.instance) {
 				try {
 					await activeSession.instance.kill();
@@ -564,6 +611,9 @@ export class SessionManager {
 		const runAgent = this.opts.runAgent;
 
 		let assistantContent = "";
+		let costUsd: number | undefined;
+		let numTurns: number | undefined;
+		let durationSecs: number | undefined;
 
 		try {
 			if (runAgent) {
@@ -578,12 +628,28 @@ export class SessionManager {
 					if (event.type === "assistant") {
 						assistantContent += event.content;
 					}
+					if (event.type === "result") {
+						costUsd = event.costUsd;
+						numTurns = event.numTurns;
+						durationSecs = event.durationSecs;
+					}
+					// Broadcast to attached clients (P0 fix)
+					for (const client of activeSession.clients) {
+						client(event);
+					}
 					yield event;
 				}
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
-			yield { type: "error", content: msg } satisfies SandcasterEvent;
+			const errEvent = {
+				type: "error",
+				content: msg,
+			} satisfies SandcasterEvent;
+			for (const client of activeSession.clients) {
+				client(errEvent);
+			}
+			yield errEvent;
 		} finally {
 			if (assistantContent) {
 				addTurn(
@@ -592,6 +658,28 @@ export class SessionManager {
 					maxHistoryTurns,
 				);
 			}
+
+			// Update session metrics (P1 fix)
+			if (costUsd !== undefined) {
+				activeSession.session.totalCostUsd += costUsd;
+			}
+			if (numTurns !== undefined) {
+				activeSession.session.totalTurns += numTurns;
+			}
+			activeSession.session.runs.push({
+				id: `run-${Date.now()}`,
+				prompt: message.prompt.slice(0, 100),
+				startedAt: nowIso(),
+				costUsd,
+				numTurns,
+				durationSecs,
+				status: "completed",
+			});
+			this.opts.store.update(sessionId, {
+				runsCount: activeSession.session.runs.length,
+				totalCostUsd: activeSession.session.totalCostUsd,
+				totalTurns: activeSession.session.totalTurns,
+			});
 
 			activeSession.isRunning = false;
 			activeSession.abortController = null;

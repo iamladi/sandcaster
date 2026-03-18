@@ -93,17 +93,20 @@ export async function executeSessionAttach(
 		return;
 	}
 
-	// Read SSE stream and output events
+	// Read SSE stream and output events (with carry-over buffer for split chunks)
 	const reader = res.body.getReader();
 	const decoder = new TextDecoder();
+	let carry = "";
 
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			const text = decoder.decode(value, { stream: true });
-			// Parse SSE lines and output event data
-			for (const line of text.split("\n")) {
+			const text = carry + decoder.decode(value, { stream: true });
+			const lines = text.split("\n");
+			// Last element may be an incomplete line — carry it over
+			carry = lines.pop() ?? "";
+			for (const line of lines) {
 				if (line.startsWith("data: ")) {
 					try {
 						const event = JSON.parse(line.slice(6)) as {

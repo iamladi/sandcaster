@@ -37,6 +37,7 @@ export interface SessionManagerOptions {
 		config?: import("../schemas.js").SandcasterConfig,
 		signal?: AbortSignal,
 	) => AsyncGenerator<SandcasterEvent>;
+	summarizer?: LlmSummarizer;
 	idleTimeoutMs?: number;
 	maxActiveSessions?: number;
 	maxHistoryTurns?: number;
