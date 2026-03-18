@@ -162,6 +162,13 @@ export const QueryRequestSchema = z.object({
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
 	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
+	composite: z
+		.object({
+			maxSandboxes: z.int().gte(1).optional(),
+			maxTotalSpawns: z.int().gte(1).optional(),
+			allowedProviders: z.array(z.enum(SANDBOX_PROVIDER_VALUES)).optional(),
+		})
+		.optional(),
 });
 
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
@@ -194,6 +201,16 @@ export const SandcasterConfigSchema = z.object({
 	provider: z.enum(PROVIDER_VALUES).optional(),
 	thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
 	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES).optional(),
+	composite: z
+		.object({
+			maxSandboxes: z.int().gte(1).lte(20).default(3),
+			maxTotalSpawns: z.int().gte(1).lte(100).default(10),
+			allowedProviders: z
+				.array(z.enum(SANDBOX_PROVIDER_VALUES))
+				.default([...SANDBOX_PROVIDER_VALUES]),
+			pollIntervalMs: z.int().gte(10).lte(1000).default(50),
+		})
+		.optional(),
 });
 
 export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;
@@ -217,12 +234,14 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 		type: z.literal("tool_use"),
 		toolName: z.string(),
 		content: z.string(),
+		sandbox: z.string().optional(),
 	}),
 	z.object({
 		type: z.literal("tool_result"),
 		content: z.string(),
 		toolName: z.string(),
 		isError: z.boolean().default(false),
+		sandbox: z.string().optional(),
 	}),
 	z.object({
 		type: z.literal("thinking"),
@@ -251,6 +270,22 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 		code: z.string().optional(),
 		hint: z.string().optional(),
 	}),
+	z.object({
+		type: z.literal("session_created"),
+		sessionId: z.string(),
+		content: z.string(),
+	}),
+	z.object({
+		type: z.literal("session_expired"),
+		sessionId: z.string(),
+		content: z.string(),
+	}),
+	z.object({
+		type: z.literal("session_command_result"),
+		command: z.string(),
+		content: z.string(),
+		data: z.unknown().optional(),
+	}),
 ]);
 
 export type SandcasterEvent = z.infer<typeof SandcasterEventSchema>;
@@ -275,3 +310,104 @@ export const RunSchema = z.object({
 });
 
 export type Run = z.infer<typeof RunSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionConfigSchema
+// ---------------------------------------------------------------------------
+
+export const SessionConfigSchema = z.object({
+	idleTimeoutSecs: z.int().gte(30).lte(86400).optional(), // default 900 (15min)
+	name: z.string().max(100).optional(),
+	maxHistoryTurns: z.int().gte(1).lte(500).optional(), // default 50
+});
+export type SessionConfig = z.infer<typeof SessionConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionCreateRequestSchema
+// ---------------------------------------------------------------------------
+
+export const SessionCreateRequestSchema = QueryRequestSchema.extend({
+	sessionConfig: SessionConfigSchema.optional(),
+});
+export type SessionCreateRequest = z.infer<typeof SessionCreateRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionMessageRequestSchema
+// ---------------------------------------------------------------------------
+
+export const SessionMessageRequestSchema = z.object({
+	prompt: z.string().min(1).max(1_000_000),
+	files: filesSchema.optional(),
+});
+export type SessionMessageRequest = z.infer<typeof SessionMessageRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionCommandSchema
+// ---------------------------------------------------------------------------
+
+export const SessionCommandSchema = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("status") }),
+	z.object({ type: z.literal("files") }),
+	z.object({ type: z.literal("clear") }),
+	z.object({ type: z.literal("compact") }),
+]);
+export type SessionCommand = z.infer<typeof SessionCommandSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionSchema
+// ---------------------------------------------------------------------------
+
+export const SESSION_STATUS_VALUES = [
+	"initializing",
+	"active",
+	"running",
+	"expired",
+	"ended",
+	"failed",
+] as const;
+
+export const SessionSchema = z.object({
+	id: z.string(),
+	status: z.enum(SESSION_STATUS_VALUES),
+	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES),
+	sandboxId: z.string().nullable(),
+	config: SandcasterConfigSchema.optional(),
+	sessionConfig: SessionConfigSchema.optional(),
+	createdAt: z.string(),
+	lastActivityAt: z.string(),
+	idleTimeoutMs: z.number(),
+	runs: z.array(
+		z.object({
+			id: z.string(),
+			prompt: z.string(),
+			startedAt: z.string(),
+			costUsd: z.number().optional(),
+			numTurns: z.number().optional(),
+			durationSecs: z.number().optional(),
+			status: z.enum(["running", "completed", "error"]),
+		}),
+	),
+	totalCostUsd: z.number(),
+	totalTurns: z.number(),
+	name: z.string().optional(),
+});
+export type Session = z.infer<typeof SessionSchema>;
+
+// ---------------------------------------------------------------------------
+// SessionRecordSchema
+// ---------------------------------------------------------------------------
+
+export const SessionRecordSchema = z.object({
+	id: z.string(),
+	status: z.enum(SESSION_STATUS_VALUES),
+	sandboxProvider: z.enum(SANDBOX_PROVIDER_VALUES),
+	sandboxId: z.string().nullable(),
+	createdAt: z.string(),
+	lastActivityAt: z.string(),
+	runsCount: z.number(),
+	totalCostUsd: z.number(),
+	totalTurns: z.number(),
+	name: z.string().optional(),
+	conversationSummary: z.string().optional(),
+});
+export type SessionRecord = z.infer<typeof SessionRecordSchema>;

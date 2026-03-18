@@ -61,14 +61,23 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 			return <Text>{event.content}</Text>;
 
 		case "tool_use":
-			return <Text dimColor>{`[tool: ${event.toolName}]`}</Text>;
+			return (
+				<Text dimColor>
+					{event.sandbox ? `[${event.sandbox}] ` : ""}[tool: {event.toolName}]
+				</Text>
+			);
 
 		case "tool_result": {
 			const content =
 				event.content.length > 200
 					? event.content.slice(0, 200)
 					: event.content;
-			return <Text dimColor>{content}</Text>;
+			return (
+				<Text dimColor>
+					{event.sandbox ? `[${event.sandbox}] ` : ""}
+					{content}
+				</Text>
+			);
 		}
 
 		case "thinking":
@@ -102,6 +111,11 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 
 		case "result":
 			return <Text>{event.content}</Text>;
+
+		case "session_created":
+		case "session_expired":
+		case "session_command_result":
+			return <Text dimColor>{event.content}</Text>;
 
 		default: {
 			const _exhaustive: never = event;

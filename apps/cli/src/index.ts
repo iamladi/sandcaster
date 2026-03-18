@@ -4,6 +4,7 @@ import { defineCommand, runMain } from "citty";
 import { initCommand } from "./commands/init.js";
 import { queryCommand } from "./commands/query.js";
 import { serveCommand } from "./commands/serve.js";
+import { sessionCommand } from "./commands/session.js";
 import { templatesCommand } from "./commands/templates.js";
 import { parseEnvFile } from "./parse-env.js";
 
@@ -17,7 +18,13 @@ if (existsSync(".env")) {
 	}
 }
 
-const knownSubcommands = new Set(["query", "serve", "init", "templates"]);
+const knownSubcommands = new Set([
+	"query",
+	"serve",
+	"init",
+	"templates",
+	"session",
+]);
 
 const main = defineCommand({
 	meta: {
@@ -29,6 +36,7 @@ const main = defineCommand({
 		serve: serveCommand,
 		init: initCommand,
 		templates: templatesCommand,
+		session: sessionCommand,
 	},
 });
 

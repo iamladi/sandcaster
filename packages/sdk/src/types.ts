@@ -66,6 +66,29 @@ export interface ErrorEvent {
 	hint?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Session types
+// ---------------------------------------------------------------------------
+
+export interface SessionCreatedEvent {
+	type: "session_created";
+	sessionId: string;
+	content: string;
+}
+
+export interface SessionExpiredEvent {
+	type: "session_expired";
+	sessionId: string;
+	content: string;
+}
+
+export interface SessionCommandResultEvent {
+	type: "session_command_result";
+	command: string;
+	content: string;
+	data?: unknown;
+}
+
 export type SandcasterEvent =
 	| SystemEvent
 	| AssistantEvent
@@ -76,7 +99,10 @@ export type SandcasterEvent =
 	| ResultEvent
 	| StderrEvent
 	| WarningEvent
-	| ErrorEvent;
+	| ErrorEvent
+	| SessionCreatedEvent
+	| SessionExpiredEvent
+	| SessionCommandResultEvent;
 
 export type SandcasterEventType = SandcasterEvent["type"];
 
@@ -125,6 +151,61 @@ export interface Run {
 	filesCount: number;
 	feedback?: string;
 	feedbackUser?: string;
+}
+
+export interface Session {
+	id: string;
+	status:
+		| "initializing"
+		| "active"
+		| "running"
+		| "expired"
+		| "ended"
+		| "failed";
+	sandboxProvider: string;
+	sandboxId: string | null;
+	createdAt: string;
+	lastActivityAt: string;
+	idleTimeoutMs: number;
+	runs: Array<{
+		id: string;
+		prompt: string;
+		startedAt: string;
+		costUsd?: number;
+		numTurns?: number;
+		durationSecs?: number;
+		status: "running" | "completed" | "error";
+	}>;
+	totalCostUsd: number;
+	totalTurns: number;
+	name?: string;
+}
+
+export interface SessionRecord {
+	id: string;
+	status: string;
+	sandboxProvider: string;
+	sandboxId: string | null;
+	createdAt: string;
+	lastActivityAt: string;
+	runsCount: number;
+	totalCostUsd: number;
+	totalTurns: number;
+	name?: string;
+	conversationSummary?: string;
+}
+
+export interface SessionCreateRequest extends QueryRequest {
+	sessionConfig?: {
+		idleTimeoutSecs?: number;
+		name?: string;
+		maxHistoryTurns?: number;
+	};
+}
+
+export interface SessionMessageRequest {
+	prompt: string;
+	files?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------

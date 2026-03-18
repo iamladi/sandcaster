@@ -40,6 +40,24 @@ vi.mock("../../runner/sandbox-tools.js", () => ({
 		.mockReturnValue([{ name: "bash" }, { name: "file_read" }]),
 }));
 
+const mockCreateCompositeTools = vi
+	.fn()
+	.mockReturnValue([{ name: "spawn_sandbox" }, { name: "exec_in" }]);
+
+vi.mock("../../runner/composite-tools.js", () => ({
+	createCompositeTools: (...args: any[]) => mockCreateCompositeTools(...args),
+}));
+
+vi.mock("../../runner/ipc-client.js", () => ({
+	IpcClient: class MockIpcClient {
+		constructor(
+			public deps: any,
+			public config: any,
+		) {}
+		request = vi.fn();
+	},
+}));
+
 import { runAgent } from "../../runner/runner-main.js";
 
 describe("runAgent", () => {
@@ -137,5 +155,71 @@ describe("runAgent", () => {
 		await vi.advanceTimersByTimeAsync(5000);
 		await promise;
 		vi.useRealTimers();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Composite tools capability gate
+// ---------------------------------------------------------------------------
+
+describe("runAgent — composite tools capability gate", () => {
+	it("does not register composite tools when composite_enabled is absent", async () => {
+		mockSetTools.mockClear();
+		mockCreateCompositeTools.mockClear();
+
+		await runAgent({ prompt: "hello" }, process.env, vi.fn());
+
+		expect(mockCreateCompositeTools).not.toHaveBeenCalled();
+		const toolNames = (mockSetTools.mock.calls[0]?.[0] as any[]).map(
+			(t: any) => t.name,
+		);
+		expect(toolNames).not.toContain("spawn_sandbox");
+	});
+
+	it("does not register composite tools when composite_enabled is false", async () => {
+		mockSetTools.mockClear();
+		mockCreateCompositeTools.mockClear();
+
+		await runAgent(
+			{ prompt: "hello", composite_enabled: false },
+			process.env,
+			vi.fn(),
+		);
+
+		expect(mockCreateCompositeTools).not.toHaveBeenCalled();
+	});
+
+	it("registers composite tools when composite_enabled is true and composite_nonce is present", async () => {
+		mockSetTools.mockClear();
+		mockCreateCompositeTools.mockClear();
+
+		await runAgent(
+			{
+				prompt: "hello",
+				composite_enabled: true,
+				composite_nonce: "test-nonce-123",
+			},
+			process.env,
+			vi.fn(),
+		);
+
+		expect(mockCreateCompositeTools).toHaveBeenCalled();
+		const toolNames = (mockSetTools.mock.calls[0]?.[0] as any[]).map(
+			(t: any) => t.name,
+		);
+		expect(toolNames).toContain("spawn_sandbox");
+	});
+
+	it("does not register composite tools when composite_enabled is true but composite_nonce is missing", async () => {
+		mockSetTools.mockClear();
+		mockCreateCompositeTools.mockClear();
+
+		await runAgent(
+			{ prompt: "hello", composite_enabled: true },
+			process.env,
+			vi.fn(),
+		);
+
+		expect(mockCreateCompositeTools).not.toHaveBeenCalled();
 	});
 });

@@ -6,8 +6,8 @@ import type { SandboxInstance } from "./sandbox-provider.js";
 // ---------------------------------------------------------------------------
 
 const MAX_FILES = 10;
-const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
-const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB
+export const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
+export const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,7 +16,7 @@ const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50MB
 /**
  * Shell-quote a string by wrapping in single quotes, escaping embedded quotes.
  */
-function shellQuote(s: string): string {
+export function shellQuote(s: string): string {
 	return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
@@ -24,7 +24,7 @@ function shellQuote(s: string): string {
  * Validate that a relative path contains no traversal or absolute references.
  * Returns the normalized POSIX path, or throws on violation.
  */
-function validateRelativePath(raw: string): string {
+export function validateRelativePath(raw: string): string {
 	if (
 		raw.startsWith("/") ||
 		raw.startsWith("\\") ||
