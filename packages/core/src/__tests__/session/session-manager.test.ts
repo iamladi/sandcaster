@@ -293,9 +293,8 @@ describe("SessionManager", () => {
 		await collectEvents(createEvents);
 
 		// Override runAgent to the slow one for the next call
-		(
-			manager as unknown as { options: { runAgent: unknown } }
-		).options.runAgent = slowAgent;
+		(manager as unknown as { opts: { runAgent: unknown } }).opts.runAgent =
+			slowAgent;
 
 		// Start first message (slow, won't complete yet)
 		const firstMsgPromise = manager.sendMessage(sessionId, {
@@ -412,7 +411,9 @@ describe("SessionManager", () => {
 		expect(sandbox.kill).toHaveBeenCalledOnce();
 		const record = store.get(sessionId);
 		expect(record?.status).toBe("ended");
-		expect(manager.getSession(sessionId)).toBeUndefined();
+		// getSession returns terminal-state sessions (for API visibility)
+		const session = manager.getSession(sessionId);
+		expect(session?.status).toBe("ended");
 	});
 
 	// -------------------------------------------------------------------------
@@ -460,9 +461,8 @@ describe("SessionManager", () => {
 		await collectEvents(createEvents);
 
 		// Switch to slow agent
-		(
-			manager as unknown as { options: { runAgent: unknown } }
-		).options.runAgent = slowAgent;
+		(manager as unknown as { opts: { runAgent: unknown } }).opts.runAgent =
+			slowAgent;
 
 		// Start a long-running message
 		const msgGenPromise = manager.sendMessage(sessionId, {
@@ -556,9 +556,8 @@ describe("SessionManager", () => {
 		await collectEvents(createEvents);
 
 		// Switch to slow agent
-		(
-			manager as unknown as { options: { runAgent: unknown } }
-		).options.runAgent = slowAgent;
+		(manager as unknown as { opts: { runAgent: unknown } }).opts.runAgent =
+			slowAgent;
 
 		// Start a slow message — timer should be cleared during run
 		const msgGenPromise = manager.sendMessage(sessionId, { prompt: "slow" });

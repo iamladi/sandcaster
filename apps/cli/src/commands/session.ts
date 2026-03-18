@@ -4,19 +4,7 @@ import { defineCommand } from "citty";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SessionListDeps {
-	baseUrl: string;
-	apiKey?: string;
-	stdout: { write: (data: string) => boolean };
-}
-
-export interface SessionDeleteDeps {
-	baseUrl: string;
-	apiKey?: string;
-	stdout: { write: (data: string) => boolean };
-}
-
-export interface SessionAttachDeps {
+export interface SessionCommandDeps {
 	baseUrl: string;
 	apiKey?: string;
 	stdout: { write: (data: string) => boolean };
@@ -26,7 +14,9 @@ export interface SessionAttachDeps {
 // Core logic (injectable for testing)
 // ---------------------------------------------------------------------------
 
-export async function executeSessionList(deps: SessionListDeps): Promise<void> {
+export async function executeSessionList(
+	deps: SessionCommandDeps,
+): Promise<void> {
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
 	};
@@ -64,7 +54,7 @@ export async function executeSessionList(deps: SessionListDeps): Promise<void> {
 
 export async function executeSessionDelete(
 	sessionId: string,
-	deps: SessionDeleteDeps,
+	deps: SessionCommandDeps,
 ): Promise<void> {
 	const headers: Record<string, string> = {};
 	if (deps.apiKey) headers.Authorization = `Bearer ${deps.apiKey}`;
@@ -84,7 +74,7 @@ export async function executeSessionDelete(
 
 export async function executeSessionAttach(
 	sessionId: string,
-	deps: SessionAttachDeps,
+	deps: SessionCommandDeps,
 ): Promise<void> {
 	const headers: Record<string, string> = {};
 	if (deps.apiKey) headers.Authorization = `Bearer ${deps.apiKey}`;

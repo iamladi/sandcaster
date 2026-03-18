@@ -30,13 +30,19 @@ export function createSessionStore(opts?: {
 	// ------------------------------------------------------------------
 	_loadFromFile(filePath, maxEntries, order, index);
 
+	// Ensure directory exists once (not per-write)
+	try {
+		mkdirSync(dirname(filePath), { recursive: true });
+	} catch {
+		// ignore — will fail on first write if truly broken
+	}
+
 	// ------------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------------
 
 	function appendToFile(record: SessionRecord): void {
 		try {
-			mkdirSync(dirname(filePath), { recursive: true });
 			appendFileSync(filePath, `${JSON.stringify(record)}\n`, "utf-8");
 		} catch {
 			console.warn(`SessionStore: failed to write to ${filePath}`);

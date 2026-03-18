@@ -143,25 +143,20 @@ function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 // ---------------------------------------------------------------------------
 
 export class SessionManager {
-	/** Exposed so tests can swap runAgent mid-test */
-	options: SessionManagerOptions;
-
 	private readonly activeSessions = new Map<string, ActiveSession>();
 	private readonly mutexes = new Map<string, Mutex>();
 
-	constructor(options: SessionManagerOptions) {
-		this.options = options;
-	}
+	constructor(private readonly opts: SessionManagerOptions) {}
 
 	// -------------------------------------------------------------------------
 	// initialize
 	// -------------------------------------------------------------------------
 
 	async initialize(): Promise<void> {
-		const activeRecords = this.options.store.getActiveRecords();
+		const activeRecords = this.opts.store.getActiveRecords();
 		for (const record of activeRecords) {
 			// Best-effort: mark as expired (no live sandbox handle at boot)
-			this.options.store.update(record.id, { status: "expired" });
+			this.opts.store.update(record.id, { status: "expired" });
 		}
 	}
 
@@ -177,7 +172,7 @@ export class SessionManager {
 		events: AsyncGenerator<SandcasterEvent>;
 	}> {
 		const maxActive =
-			this.options.maxActiveSessions ?? DEFAULT_MAX_ACTIVE_SESSIONS;
+			this.opts.maxActiveSessions ?? DEFAULT_MAX_ACTIVE_SESSIONS;
 
 		if (this.activeSessions.size >= maxActive) {
 			throw new SessionError(
@@ -204,12 +199,12 @@ export class SessionManager {
 			totalTurns: 0,
 			name: request.sessionConfig?.name,
 		};
-		this.options.store.create(record);
+		this.opts.store.create(record);
 
 		let instance: SandboxInstance | null = null;
 
 		try {
-			instance = await this.options.sandboxFactory({
+			instance = await this.opts.sandboxFactory({
 				provider: sandboxProvider,
 				template: undefined,
 				timeoutMs: (request.timeout ?? 600) * 1000,
@@ -217,20 +212,20 @@ export class SessionManager {
 				apiKey: request.apiKeys?.e2b,
 			});
 		} catch (err) {
-			this.options.store.update(sessionId, { status: "failed" });
+			this.opts.store.update(sessionId, { status: "failed" });
 			throw err;
 		}
 
-		this.options.store.update(sessionId, { status: "active" });
+		this.opts.store.update(sessionId, { status: "active" });
 
 		const idleTimeoutMs =
 			request.sessionConfig?.idleTimeoutSecs != null
 				? request.sessionConfig.idleTimeoutSecs * 1000
-				: (this.options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS);
+				: (this.opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS);
 
 		const maxHistoryTurns =
 			request.sessionConfig?.maxHistoryTurns ??
-			this.options.maxHistoryTurns ??
+			this.opts.maxHistoryTurns ??
 			DEFAULT_MAX_HISTORY_TURNS;
 
 		const session: Session = {
@@ -265,10 +260,7 @@ export class SessionManager {
 		// Start idle timer
 		this._startIdleTimer(sessionId, idleTimeoutMs);
 
-		const hasPrompt =
-			request.prompt !== undefined &&
-			request.prompt !== null &&
-			(request.prompt as string) !== "";
+		const hasPrompt = Boolean(request.prompt);
 
 		// Build the outer event stream
 		const self = this;
@@ -280,14 +272,14 @@ export class SessionManager {
 				content: `Session ${sessionId} created`,
 			} satisfies SandcasterEvent;
 
-			if (!hasPrompt || !self.options.runAgent) {
+			if (!hasPrompt || !self.opts.runAgent) {
 				return;
 			}
 
 			// Run first message through agent (acquires mutex internally)
 			for await (const event of self._runAgentForMessage(
 				sessionId,
-				{ prompt: request.prompt as string, files: request.files },
+				{ prompt: request.prompt, files: request.files },
 				maxHistoryTurns,
 				config,
 			)) {
@@ -332,7 +324,9 @@ export class SessionManager {
 		}
 
 		const maxHistoryTurns =
-			this.options.maxHistoryTurns ?? DEFAULT_MAX_HISTORY_TURNS;
+			activeSession.session.sessionConfig?.maxHistoryTurns ??
+			this.opts.maxHistoryTurns ??
+			DEFAULT_MAX_HISTORY_TURNS;
 		const config = activeSession.session.config;
 
 		// Eagerly start agent run, return buffered generator
@@ -376,7 +370,7 @@ export class SessionManager {
 			}
 
 			activeSession.session.status = "ended";
-			this.options.store.update(sessionId, { status: "ended" });
+			this.opts.store.update(sessionId, { status: "ended" });
 
 			this.activeSessions.delete(sessionId);
 			this.mutexes.delete(sessionId);
@@ -394,16 +388,8 @@ export class SessionManager {
 		if (activeSession) {
 			return activeSession.session;
 		}
-		// For non-active sessions, check store — but only return non-terminal ones
-		const record = this.options.store.get(sessionId);
+		const record = this.opts.store.get(sessionId);
 		if (!record) return undefined;
-		if (
-			record.status === "ended" ||
-			record.status === "expired" ||
-			record.status === "failed"
-		) {
-			return undefined;
-		}
 		return sessionRecordToSession(record);
 	}
 
@@ -412,7 +398,7 @@ export class SessionManager {
 	// -------------------------------------------------------------------------
 
 	listSessions(limit?: number): SessionRecord[] {
-		return this.options.store.list(limit);
+		return this.opts.store.list(limit);
 	}
 
 	// -------------------------------------------------------------------------
@@ -493,7 +479,7 @@ export class SessionManager {
 			}
 
 			activeSession.session.status = "expired";
-			this.options.store.update(sessionId, { status: "expired" });
+			this.opts.store.update(sessionId, { status: "expired" });
 
 			const expiredEvent: SandcasterEvent = {
 				type: "session_expired",
@@ -538,7 +524,7 @@ export class SessionManager {
 		this._clearIdleTimer(sessionId);
 
 		activeSession.session.status = "running";
-		this.options.store.update(sessionId, { status: "running" });
+		this.opts.store.update(sessionId, { status: "running" });
 		activeSession.isRunning = true;
 
 		const abortController = new AbortController();
@@ -575,7 +561,7 @@ export class SessionManager {
 			: message.prompt;
 
 		const runRequest: QueryRequest = { prompt: fullPrompt };
-		const runAgent = this.options.runAgent;
+		const runAgent = this.opts.runAgent;
 
 		let assistantContent = "";
 
@@ -612,11 +598,11 @@ export class SessionManager {
 
 			if (this.activeSessions.has(sessionId)) {
 				activeSession.session.status = "active";
-				this.options.store.update(sessionId, { status: "active" });
+				this.opts.store.update(sessionId, { status: "active" });
 
 				const idleTimeoutMs =
 					activeSession.session.idleTimeoutMs ??
-					this.options.idleTimeoutMs ??
+					this.opts.idleTimeoutMs ??
 					DEFAULT_IDLE_TIMEOUT_MS;
 				this._startIdleTimer(sessionId, idleTimeoutMs);
 			}

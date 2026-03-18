@@ -17,6 +17,7 @@ export function registerSessionRoutes(
 	},
 ): void {
 	const { sessionManager } = opts;
+	const config = loadConfig() ?? undefined;
 
 	// -------------------------------------------------------------------------
 	// POST /sessions
@@ -37,8 +38,6 @@ export function registerSessionRoutes(
 				400,
 			);
 		}
-
-		const config = loadConfig() ?? undefined;
 
 		try {
 			const { events } = await sessionManager.createSession(
@@ -222,7 +221,7 @@ export function registerSessionRoutes(
 							event: event.type,
 							data: JSON.stringify(event),
 						});
-						if (event.type === "session_expired" || event.type === "error") {
+						if (event.type === "session_expired") {
 							break;
 						}
 					} else {
