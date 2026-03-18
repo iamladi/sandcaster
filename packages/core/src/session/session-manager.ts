@@ -14,9 +14,6 @@ import {
 	type SessionManagerOptions,
 } from "./types.js";
 
-// Re-export for public API
-export type { SessionManagerOptions };
-
 // ---------------------------------------------------------------------------
 // SessionError
 // ---------------------------------------------------------------------------
