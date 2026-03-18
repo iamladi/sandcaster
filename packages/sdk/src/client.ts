@@ -4,6 +4,10 @@ import type {
 	Run,
 	SandcasterClientOptions,
 	SandcasterEvent,
+	Session,
+	SessionCreateRequest,
+	SessionMessageRequest,
+	SessionRecord,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -177,6 +181,394 @@ export class SandcasterClient {
 		}
 
 		return response.json() as Promise<Run[]>;
+	}
+
+	// -------------------------------------------------------------------------
+	// createSession()
+	// -------------------------------------------------------------------------
+
+	createSession(
+		request: SessionCreateRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		const self = this;
+		return {
+			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
+				const controller = new AbortController();
+				self.#activeControllers.add(controller);
+
+				let abortHandler: (() => void) | null = null;
+				if (options?.signal) {
+					if (options.signal.aborted) {
+						controller.abort(options.signal.reason);
+					} else {
+						abortHandler = () => controller.abort(options.signal?.reason);
+						options.signal.addEventListener("abort", abortHandler, {
+							once: true,
+						});
+					}
+				}
+
+				const cleanup = () => {
+					self.#activeControllers.delete(controller);
+					if (abortHandler) {
+						options?.signal?.removeEventListener("abort", abortHandler);
+						abortHandler = null;
+					}
+				};
+
+				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
+					null;
+
+				const ensureGenerator = (): Promise<
+					AsyncGenerator<SandcasterEvent>
+				> => {
+					if (!generatorPromise) {
+						generatorPromise = (async () => {
+							const response = await fetch(`${self.#baseUrl}/sessions`, {
+								method: "POST",
+								headers: {
+									"Content-Type": "application/json",
+									...self.#authHeaders(),
+								},
+								body: JSON.stringify(request),
+								signal: controller.signal,
+							});
+
+							if (!response.ok) {
+								throw new Error(`${response.status} ${response.statusText}`);
+							}
+
+							return parseSSEStream(
+								response.body as ReadableStream<Uint8Array>,
+								controller.signal,
+							);
+						})();
+					}
+					return generatorPromise;
+				};
+
+				return {
+					async next(): Promise<IteratorResult<SandcasterEvent>> {
+						try {
+							const gen = await ensureGenerator();
+							const result = await gen.next();
+							if (result.done) {
+								cleanup();
+							}
+							return result;
+						} catch (error) {
+							cleanup();
+							throw error;
+						}
+					},
+					async return(
+						value?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								await gen.return(value);
+							} catch {
+								// ignore
+							}
+						}
+						return { done: true, value: undefined };
+					},
+					async throw(
+						error?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								return gen.throw(error);
+							} catch {
+								// ignore
+							}
+						}
+						throw error;
+					},
+				};
+			},
+		};
+	}
+
+	// -------------------------------------------------------------------------
+	// sendSessionMessage()
+	// -------------------------------------------------------------------------
+
+	sendSessionMessage(
+		sessionId: string,
+		message: SessionMessageRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		const self = this;
+		return {
+			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
+				const controller = new AbortController();
+				self.#activeControllers.add(controller);
+
+				let abortHandler: (() => void) | null = null;
+				if (options?.signal) {
+					if (options.signal.aborted) {
+						controller.abort(options.signal.reason);
+					} else {
+						abortHandler = () => controller.abort(options.signal?.reason);
+						options.signal.addEventListener("abort", abortHandler, {
+							once: true,
+						});
+					}
+				}
+
+				const cleanup = () => {
+					self.#activeControllers.delete(controller);
+					if (abortHandler) {
+						options?.signal?.removeEventListener("abort", abortHandler);
+						abortHandler = null;
+					}
+				};
+
+				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
+					null;
+
+				const ensureGenerator = (): Promise<
+					AsyncGenerator<SandcasterEvent>
+				> => {
+					if (!generatorPromise) {
+						generatorPromise = (async () => {
+							const response = await fetch(
+								`${self.#baseUrl}/sessions/${sessionId}/messages`,
+								{
+									method: "POST",
+									headers: {
+										"Content-Type": "application/json",
+										...self.#authHeaders(),
+									},
+									body: JSON.stringify(message),
+									signal: controller.signal,
+								},
+							);
+
+							if (!response.ok) {
+								throw new Error(`${response.status} ${response.statusText}`);
+							}
+
+							return parseSSEStream(
+								response.body as ReadableStream<Uint8Array>,
+								controller.signal,
+							);
+						})();
+					}
+					return generatorPromise;
+				};
+
+				return {
+					async next(): Promise<IteratorResult<SandcasterEvent>> {
+						try {
+							const gen = await ensureGenerator();
+							const result = await gen.next();
+							if (result.done) {
+								cleanup();
+							}
+							return result;
+						} catch (error) {
+							cleanup();
+							throw error;
+						}
+					},
+					async return(
+						value?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								await gen.return(value);
+							} catch {
+								// ignore
+							}
+						}
+						return { done: true, value: undefined };
+					},
+					async throw(
+						error?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								return gen.throw(error);
+							} catch {
+								// ignore
+							}
+						}
+						throw error;
+					},
+				};
+			},
+		};
+	}
+
+	// -------------------------------------------------------------------------
+	// attachSession()
+	// -------------------------------------------------------------------------
+
+	attachSession(
+		id: string,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		const self = this;
+		return {
+			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
+				const controller = new AbortController();
+				self.#activeControllers.add(controller);
+
+				let abortHandler: (() => void) | null = null;
+				if (options?.signal) {
+					if (options.signal.aborted) {
+						controller.abort(options.signal.reason);
+					} else {
+						abortHandler = () => controller.abort(options.signal?.reason);
+						options.signal.addEventListener("abort", abortHandler, {
+							once: true,
+						});
+					}
+				}
+
+				const cleanup = () => {
+					self.#activeControllers.delete(controller);
+					if (abortHandler) {
+						options?.signal?.removeEventListener("abort", abortHandler);
+						abortHandler = null;
+					}
+				};
+
+				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
+					null;
+
+				const ensureGenerator = (): Promise<
+					AsyncGenerator<SandcasterEvent>
+				> => {
+					if (!generatorPromise) {
+						generatorPromise = (async () => {
+							const response = await fetch(
+								`${self.#baseUrl}/sessions/${id}/events`,
+								{
+									method: "GET",
+									headers: { ...self.#authHeaders() },
+									signal: controller.signal,
+								},
+							);
+
+							if (!response.ok) {
+								throw new Error(`${response.status} ${response.statusText}`);
+							}
+
+							return parseSSEStream(
+								response.body as ReadableStream<Uint8Array>,
+								controller.signal,
+							);
+						})();
+					}
+					return generatorPromise;
+				};
+
+				return {
+					async next(): Promise<IteratorResult<SandcasterEvent>> {
+						try {
+							const gen = await ensureGenerator();
+							const result = await gen.next();
+							if (result.done) {
+								cleanup();
+							}
+							return result;
+						} catch (error) {
+							cleanup();
+							throw error;
+						}
+					},
+					async return(
+						value?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								await gen.return(value);
+							} catch {
+								// ignore
+							}
+						}
+						return { done: true, value: undefined };
+					},
+					async throw(
+						error?: unknown,
+					): Promise<IteratorResult<SandcasterEvent>> {
+						cleanup();
+						if (generatorPromise) {
+							try {
+								const gen = await generatorPromise;
+								return gen.throw(error);
+							} catch {
+								// ignore
+							}
+						}
+						throw error;
+					},
+				};
+			},
+		};
+	}
+
+	// -------------------------------------------------------------------------
+	// listSessions()
+	// -------------------------------------------------------------------------
+
+	async listSessions(): Promise<SessionRecord[]> {
+		const response = await fetch(`${this.#baseUrl}/sessions`, {
+			method: "GET",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
+
+		return response.json() as Promise<SessionRecord[]>;
+	}
+
+	// -------------------------------------------------------------------------
+	// getSession()
+	// -------------------------------------------------------------------------
+
+	async getSession(id: string): Promise<Session> {
+		const response = await fetch(`${this.#baseUrl}/sessions/${id}`, {
+			method: "GET",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
+
+		return response.json() as Promise<Session>;
+	}
+
+	// -------------------------------------------------------------------------
+	// deleteSession()
+	// -------------------------------------------------------------------------
+
+	async deleteSession(id: string): Promise<void> {
+		const response = await fetch(`${this.#baseUrl}/sessions/${id}`, {
+			method: "DELETE",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
 	}
 
 	// -------------------------------------------------------------------------
