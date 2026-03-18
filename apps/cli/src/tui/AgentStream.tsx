@@ -112,6 +112,11 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 		case "result":
 			return <Text>{event.content}</Text>;
 
+		case "session_created":
+		case "session_expired":
+		case "session_command_result":
+			return <Text dimColor>{event.content}</Text>;
+
 		default: {
 			const _exhaustive: never = event;
 			return <Text>{String(_exhaustive)}</Text>;

@@ -16,6 +16,9 @@ const KNOWN_EVENT_TYPES = new Set<SandcasterEventType>([
 	"stderr",
 	"warning",
 	"error",
+	"session_created",
+	"session_expired",
+	"session_command_result",
 ]);
 
 function isKnownEventType(type: unknown): type is SandcasterEventType {

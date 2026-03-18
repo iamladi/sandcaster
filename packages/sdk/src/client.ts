@@ -4,6 +4,10 @@ import type {
 	Run,
 	SandcasterClientOptions,
 	SandcasterEvent,
+	Session,
+	SessionCreateRequest,
+	SessionMessageRequest,
+	SessionRecord,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -31,12 +35,12 @@ export class SandcasterClient {
 		return {};
 	}
 
-	// -------------------------------------------------------------------------
-	// query()
-	// -------------------------------------------------------------------------
-
-	query(
-		request: QueryRequest,
+	/**
+	 * Build an AsyncIterable that lazily opens an SSE connection on first pull.
+	 * Handles abort-controller wiring, cleanup, and generator lifecycle.
+	 */
+	#makeSSEIterable(
+		fetchFn: (signal: AbortSignal) => Promise<Response>,
 		options?: { signal?: AbortSignal },
 	): AsyncIterable<SandcasterEvent> {
 		const self = this;
@@ -45,7 +49,6 @@ export class SandcasterClient {
 				const controller = new AbortController();
 				self.#activeControllers.add(controller);
 
-				// Link external signal to internal controller
 				let abortHandler: (() => void) | null = null;
 				if (options?.signal) {
 					if (options.signal.aborted) {
@@ -74,15 +77,7 @@ export class SandcasterClient {
 				> => {
 					if (!generatorPromise) {
 						generatorPromise = (async () => {
-							const response = await fetch(`${self.#baseUrl}/query`, {
-								method: "POST",
-								headers: {
-									"Content-Type": "application/json",
-									...self.#authHeaders(),
-								},
-								body: JSON.stringify(request),
-								signal: controller.signal,
-							});
+							const response = await fetchFn(controller.signal);
 
 							if (!response.ok) {
 								throw new Error(`${response.status} ${response.statusText}`);
@@ -120,8 +115,7 @@ export class SandcasterClient {
 								const gen = await generatorPromise;
 								await gen.return(value);
 							} catch {
-								// generatorPromise may have rejected (e.g. fetch failure) —
-								// return() must always succeed cleanly
+								// generatorPromise may have rejected — return() must succeed
 							}
 						}
 						return { done: true, value: undefined };
@@ -135,7 +129,7 @@ export class SandcasterClient {
 								const gen = await generatorPromise;
 								return gen.throw(error);
 							} catch {
-								// generatorPromise rejected; fall through to re-throw caller's error
+								// generatorPromise rejected; fall through
 							}
 						}
 						throw error;
@@ -143,6 +137,29 @@ export class SandcasterClient {
 				};
 			},
 		};
+	}
+
+	// -------------------------------------------------------------------------
+	// query()
+	// -------------------------------------------------------------------------
+
+	query(
+		request: QueryRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/query`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
+					},
+					body: JSON.stringify(request),
+					signal,
+				}),
+			options,
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -177,6 +194,121 @@ export class SandcasterClient {
 		}
 
 		return response.json() as Promise<Run[]>;
+	}
+
+	// -------------------------------------------------------------------------
+	// createSession()
+	// -------------------------------------------------------------------------
+
+	createSession(
+		request: SessionCreateRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
+					},
+					body: JSON.stringify(request),
+					signal,
+				}),
+			options,
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// sendSessionMessage()
+	// -------------------------------------------------------------------------
+
+	sendSessionMessage(
+		sessionId: string,
+		message: SessionMessageRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions/${sessionId}/messages`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
+					},
+					body: JSON.stringify(message),
+					signal,
+				}),
+			options,
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// attachSession()
+	// -------------------------------------------------------------------------
+
+	attachSession(
+		id: string,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions/${id}/events`, {
+					method: "GET",
+					headers: { ...this.#authHeaders() },
+					signal,
+				}),
+			options,
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// listSessions()
+	// -------------------------------------------------------------------------
+
+	async listSessions(): Promise<SessionRecord[]> {
+		const response = await fetch(`${this.#baseUrl}/sessions`, {
+			method: "GET",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
+
+		return response.json() as Promise<SessionRecord[]>;
+	}
+
+	// -------------------------------------------------------------------------
+	// getSession()
+	// -------------------------------------------------------------------------
+
+	async getSession(id: string): Promise<Session> {
+		const response = await fetch(`${this.#baseUrl}/sessions/${id}`, {
+			method: "GET",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
+
+		return response.json() as Promise<Session>;
+	}
+
+	// -------------------------------------------------------------------------
+	// deleteSession()
+	// -------------------------------------------------------------------------
+
+	async deleteSession(id: string): Promise<void> {
+		const response = await fetch(`${this.#baseUrl}/sessions/${id}`, {
+			method: "DELETE",
+			headers: { ...this.#authHeaders() },
+		});
+
+		if (!response.ok) {
+			throw new Error(`${response.status} ${response.statusText}`);
+		}
 	}
 
 	// -------------------------------------------------------------------------

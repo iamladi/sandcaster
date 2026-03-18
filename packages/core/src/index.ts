@@ -8,5 +8,6 @@ export * from "./sandbox-provider.js";
 export * from "./sandbox-registry.js";
 export * from "./sandbox-resolver.js";
 export * from "./schemas.js";
+export * from "./session/index.js";
 export * from "./store.js";
 export * from "./telemetry.js";
