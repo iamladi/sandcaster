@@ -7,6 +7,7 @@ import type {
 	SessionCreateRequest,
 	SessionRecord,
 } from "../schemas.js";
+import { executeCommand, parseSessionCommand } from "./commands.js";
 import { addTurn, buildAgentContext } from "./conversation.js";
 import {
 	type ActiveSession,
@@ -102,21 +103,30 @@ function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 	const buffer: T[] = [];
 	let done = false;
 	let error: unknown;
+	let cancelled = false;
 	let notify: (() => void) | undefined;
+	let drain: (() => void) | undefined;
 
 	// Start consuming immediately
 	(async () => {
 		try {
 			for await (const item of source) {
-				// Cap buffer to prevent unbounded memory growth
-				if (buffer.length < MAX_EAGER_BUFFER) {
-					buffer.push(item);
-				}
+				if (cancelled) break;
+				buffer.push(item);
 				notify?.();
 				notify = undefined;
+				// Backpressure: pause producer when buffer hits high-water mark
+				if (buffer.length >= MAX_EAGER_BUFFER) {
+					await new Promise<void>((resolve) => {
+						drain = resolve;
+					});
+					if (cancelled) break;
+				}
 			}
 		} catch (err) {
-			error = err;
+			if (!cancelled) {
+				error = err;
+			}
 			notify?.();
 			notify = undefined;
 		} finally {
@@ -127,18 +137,29 @@ function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 	})();
 
 	return (async function* (): AsyncGenerator<T> {
-		while (true) {
-			if (buffer.length > 0) {
-				// biome-ignore lint/style/noNonNullAssertion: length checked
-				yield buffer.shift()!;
-			} else if (done) {
-				if (error !== undefined) throw error;
-				return;
-			} else {
-				await new Promise<void>((resolve) => {
-					notify = resolve;
-				});
+		try {
+			while (true) {
+				if (buffer.length > 0) {
+					// biome-ignore lint/style/noNonNullAssertion: length checked
+					yield buffer.shift()!;
+					// Resume producer if it was waiting on backpressure
+					drain?.();
+					drain = undefined;
+				} else if (done) {
+					if (error !== undefined) throw error;
+					return;
+				} else {
+					await new Promise<void>((resolve) => {
+						notify = resolve;
+					});
+				}
 			}
+		} finally {
+			// Consumer disconnected — unblock producer and close source
+			cancelled = true;
+			drain?.();
+			drain = undefined;
+			await source.return(undefined as T);
 		}
 	})();
 }
@@ -256,7 +277,6 @@ export class SessionManager {
 			idleTimer: null,
 			abortController: null,
 			clients: new Set(),
-			isRunning: false,
 		};
 
 		this.activeSessions.set(sessionId, activeSession);
@@ -425,9 +445,6 @@ export class SessionManager {
 		sessionId: string,
 		prompt: string,
 	): AsyncGenerator<SandcasterEvent> {
-		const { parseSessionCommand, executeCommand } = await import(
-			"./commands.js"
-		);
 		const command = parseSessionCommand(prompt);
 		if (!command) return;
 
@@ -572,7 +589,6 @@ export class SessionManager {
 
 		activeSession.session.status = "running";
 		this.opts.store.update(sessionId, { status: "running" });
-		activeSession.isRunning = true;
 
 		const abortController = new AbortController();
 		activeSession.abortController = abortController;
@@ -614,6 +630,8 @@ export class SessionManager {
 		let costUsd: number | undefined;
 		let numTurns: number | undefined;
 		let durationSecs: number | undefined;
+		// biome-ignore lint/style/useSingleVarDeclarator: set in catch, read in finally
+		let runFailed = false;
 
 		try {
 			if (runAgent) {
@@ -641,6 +659,7 @@ export class SessionManager {
 				}
 			}
 		} catch (err) {
+			runFailed = true;
 			const msg = err instanceof Error ? err.message : String(err);
 			const errEvent = {
 				type: "error",
@@ -673,7 +692,7 @@ export class SessionManager {
 				costUsd,
 				numTurns,
 				durationSecs,
-				status: "completed",
+				status: runFailed ? "error" : "completed",
 			});
 			this.opts.store.update(sessionId, {
 				runsCount: activeSession.session.runs.length,
@@ -681,7 +700,6 @@ export class SessionManager {
 				totalTurns: activeSession.session.totalTurns,
 			});
 
-			activeSession.isRunning = false;
 			activeSession.abortController = null;
 
 			if (this.activeSessions.has(sessionId)) {

@@ -105,7 +105,7 @@ export function createSessionStore(opts?: {
 	}
 
 	function activeCount(): number {
-		return order.filter((r) => ACTIVE_STATUSES.has(r.status)).length;
+		return getActiveRecords().length;
 	}
 
 	return {

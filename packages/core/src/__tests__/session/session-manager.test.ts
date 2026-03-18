@@ -735,4 +735,160 @@ describe("SessionManager", () => {
 		expect(err.code).toBe("SESSION_NOT_FOUND");
 		expect(err.message).toBe("test message");
 	});
+
+	// -------------------------------------------------------------------------
+	// Test 19: failed run records status "error" (F3)
+	// -------------------------------------------------------------------------
+
+	it("records run with status 'error' when agent throws", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+		const throwingAgent = async function* (): AsyncGenerator<SandcasterEvent> {
+			yield {
+				type: "assistant",
+				content: "Starting...",
+			} satisfies SandcasterEvent;
+			throw new Error("LLM provider down");
+		};
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: createFakeRunAgent(),
+		});
+
+		const { sessionId, events: createEvents } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: undefined }),
+		);
+		await collectEvents(createEvents);
+
+		// Switch to throwing agent
+		(manager as unknown as { opts: { runAgent: unknown } }).opts.runAgent =
+			throwingAgent;
+
+		const msgEvents = await manager.sendMessage(sessionId, {
+			prompt: "crash",
+		});
+		const collected = await collectEvents(msgEvents);
+
+		// Should have yielded an error event
+		expect(collected.some((e) => e.type === "error")).toBe(true);
+
+		// The run should be recorded with status "error", not "completed"
+		const active = manager.getActiveSession(sessionId);
+		expect(active!.session.runs).toHaveLength(1);
+		expect(active!.session.runs[0].status).toBe("error");
+	});
+
+	// -------------------------------------------------------------------------
+	// Test 20: eagerBuffer preserves all events under load (F1)
+	// -------------------------------------------------------------------------
+
+	it("preserves all events when agent generates more than buffer limit", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+
+		// Generate 1100 events (> MAX_EAGER_BUFFER of 1000)
+		const eventCount = 1100;
+		const manyEvents: SandcasterEvent[] = [];
+		for (let i = 0; i < eventCount - 1; i++) {
+			manyEvents.push({
+				type: "assistant",
+				content: `token-${i}`,
+			} satisfies SandcasterEvent);
+		}
+		manyEvents.push({
+			type: "result",
+			content: "Done",
+			costUsd: 0,
+			numTurns: 1,
+			durationSecs: 0,
+		} satisfies SandcasterEvent);
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: createFakeRunAgent(manyEvents),
+		});
+
+		const { events } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: "hi" }),
+		);
+
+		// Delay consumer so the producer fills the buffer before we start pulling.
+		// Without backpressure, events beyond MAX_EAGER_BUFFER (1000) are dropped.
+		await new Promise((resolve) => setTimeout(resolve, 100));
+
+		const collected = await collectEvents(events);
+
+		// +1 for session_created event
+		expect(collected).toHaveLength(eventCount + 1);
+		// The last event must be the result — not dropped
+		expect(collected[collected.length - 1]).toMatchObject({
+			type: "result",
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Test 21: consumer disconnect unblocks backpressured producer (F1-fix)
+	// -------------------------------------------------------------------------
+
+	it("cleans up producer when consumer disconnects mid-stream under backpressure", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+
+		// Track whether the source generator was properly closed
+		let sourceReturnCalled = false;
+
+		// Generate 1100 events to trigger backpressure (> MAX_EAGER_BUFFER of 1000)
+		const slowAgent = async function* (): AsyncGenerator<SandcasterEvent> {
+			try {
+				for (let i = 0; i < 1100; i++) {
+					yield {
+						type: "assistant",
+						content: `token-${i}`,
+					} satisfies SandcasterEvent;
+				}
+				yield {
+					type: "result",
+					content: "Done",
+					costUsd: 0,
+					numTurns: 1,
+					durationSecs: 0,
+				} satisfies SandcasterEvent;
+			} finally {
+				sourceReturnCalled = true;
+			}
+		};
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: slowAgent,
+		});
+
+		const { sessionId, events } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: "hi" }),
+		);
+
+		// Pull a few events then disconnect (call .return() on the iterator)
+		const iter = events[Symbol.asyncIterator]();
+		const first = await iter.next(); // session_created
+		expect(first.value).toMatchObject({ type: "session_created" });
+		const second = await iter.next(); // first assistant token
+		expect(second.value).toMatchObject({ type: "assistant" });
+
+		// Simulate client disconnect
+		await iter.return!(undefined);
+
+		// Give the producer time to unblock and clean up
+		await new Promise((resolve) => setTimeout(resolve, 200));
+
+		// The source generator's finally block should have run
+		expect(sourceReturnCalled).toBe(true);
+
+		// Session should NOT be stuck in "running" — it should have finalized
+		const active = manager.getActiveSession(sessionId);
+		expect(active!.session.status).not.toBe("running");
+	});
 });

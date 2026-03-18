@@ -21,8 +21,6 @@ export interface ActiveSession {
 	abortController: AbortController | null;
 	/** Set of attached SSE client write functions */
 	clients: Set<(event: SandcasterEvent) => boolean>;
-	/** Per-session mutex for serializing operations */
-	isRunning: boolean;
 	/** Conversation summary from /compact */
 	conversationSummary?: string;
 }

@@ -50,7 +50,6 @@ function makeActiveSession(overrides?: Partial<ActiveSession>): ActiveSession {
 		idleTimer: null,
 		abortController: null,
 		clients: new Set(),
-		isRunning: false,
 		...overrides,
 	};
 }
