@@ -2,16 +2,27 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
+import {
+	generateNonce,
+	ipcResponsePath,
+	ipcTempPath,
+	parseCompositeRequest,
+	serializeCompositeResponse,
+	validateNonce,
+} from "./composite-ipc.js";
 import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
+	shellQuote,
 	uploadFiles,
 	uploadSkills,
 } from "./files.js";
+import { resolveCompositeConfig, SandboxPool } from "./sandbox-pool.js";
 import type { SandboxInstance } from "./sandbox-provider.js";
 import { getSandboxProvider } from "./sandbox-registry.js";
 import {
+	PROVIDER_ENV_VARS,
 	resolveProviderCredential,
 	resolveSandboxProvider,
 } from "./sandbox-resolver.js";
@@ -118,6 +129,10 @@ function buildEnvs(request: QueryRequest): Record<string, string> {
 function buildAgentConfig(
 	request: QueryRequest,
 	config: SandcasterConfig | undefined,
+	compositeFields?: {
+		nonce: string;
+		pollIntervalMs: number;
+	},
 ): Record<string, unknown> {
 	const timeout = request.timeout ?? config?.timeout ?? 300;
 	const model = request.model ?? config?.model;
@@ -145,6 +160,13 @@ function buildAgentConfig(
 		(request.extraSkills !== undefined &&
 			Object.keys(request.extraSkills).length > 0);
 	if (hasSkills) agentConfig.has_skills = true;
+
+	// Composite fields (only injected when composite is active)
+	if (compositeFields !== undefined) {
+		agentConfig.composite_enabled = true;
+		agentConfig.composite_nonce = compositeFields.nonce;
+		agentConfig.composite_poll_interval_ms = compositeFields.pollIntervalMs;
+	}
 
 	return agentConfig;
 }
@@ -236,6 +258,76 @@ export async function* runAgentInSandbox(
 
 	const instance: SandboxInstance = createResult.instance;
 
+	// ------------------------------------------------------------------
+	// 3b. Set up SandboxPool and IPC nonce (composite only)
+	// ------------------------------------------------------------------
+	const hasCompositeConfig =
+		request.composite !== undefined || config?.composite !== undefined;
+	const isCompositeCapable = SandboxPool.isCompositeCapable(instance);
+	const compositeActive = hasCompositeConfig && isCompositeCapable;
+
+	let pool: SandboxPool | undefined;
+	let compositeNonce: string | undefined;
+	let resolvedComposite: ReturnType<typeof resolveCompositeConfig> | undefined;
+	let sigTermHandler: (() => Promise<void>) | undefined;
+
+	if (compositeActive) {
+		resolvedComposite = resolveCompositeConfig(
+			config?.composite,
+			request.composite,
+		);
+
+		compositeNonce = generateNonce();
+
+		const poolConfig = {
+			maxSandboxes: resolvedComposite.maxSandboxes,
+			maxTotalSpawns: resolvedComposite.maxTotalSpawns,
+			allowedProviders: resolvedComposite.allowedProviders,
+			requestId: requestId ?? "unknown",
+		};
+
+		// Build factory for secondary sandboxes
+		const sandboxFactory: import("./sandbox-pool.js").SandboxFactory = async (
+			factoryProvider,
+			factoryTemplate?,
+		) => {
+			const secondaryProviderResult = await getSandboxProvider(factoryProvider);
+			if (!secondaryProviderResult.ok) {
+				throw new Error(secondaryProviderResult.message);
+			}
+			const secondaryApiKey = resolveProviderCredential(factoryProvider, {
+				requestApiKeys: request.apiKeys as Record<string, string | undefined>,
+			});
+			const secondaryCreateResult =
+				await secondaryProviderResult.provider.create({
+					template: factoryTemplate,
+					timeoutMs,
+					envs:
+						secondaryApiKey && PROVIDER_ENV_VARS[factoryProvider]
+							? { [PROVIDER_ENV_VARS[factoryProvider]]: secondaryApiKey }
+							: {},
+					metadata: { requestId: requestId ?? "unknown" },
+					apiKey: secondaryApiKey,
+				});
+			if (!secondaryCreateResult.ok) {
+				throw new Error(secondaryCreateResult.message);
+			}
+			return secondaryCreateResult.instance;
+		};
+
+		pool = new SandboxPool(instance, poolConfig, sandboxFactory);
+
+		// Stale IPC cleanup
+		await instance.commands.run(`rm -f /tmp/sandcaster-ipc-*.json*`);
+
+		// Register SIGTERM handler for graceful cleanup
+		const poolRef = pool;
+		sigTermHandler = async () => {
+			await poolRef.killAll();
+		};
+		process.once("SIGTERM", sigTermHandler);
+	}
+
 	try {
 		// ------------------------------------------------------------------
 		// 4. Upload runner bundle
@@ -248,7 +340,16 @@ export async function* runAgentInSandbox(
 		// ------------------------------------------------------------------
 		// 5. Upload agent config
 		// ------------------------------------------------------------------
-		const agentConfig = buildAgentConfig(request, config);
+		const agentConfig = buildAgentConfig(
+			request,
+			config,
+			compositeActive && compositeNonce !== undefined && resolvedComposite
+				? {
+						nonce: compositeNonce,
+						pollIntervalMs: resolvedComposite.pollIntervalMs,
+					}
+				: undefined,
+		);
 		await instance.files.write(
 			"/opt/sandcaster/agent_config.json",
 			JSON.stringify(agentConfig),
@@ -300,7 +401,11 @@ export async function* runAgentInSandbox(
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
 				onStderr: (data: string) => {
-					_stderrBuffer += data;
+					if (_stderrBuffer.length + data.length > 500) {
+						_stderrBuffer = (_stderrBuffer + data).slice(-500);
+					} else {
+						_stderrBuffer += data;
+					}
 				},
 			})
 			.then(() => {
@@ -320,8 +425,70 @@ export async function* runAgentInSandbox(
 				const lineStr = String(line).trim();
 				if (!lineStr) continue;
 
+				// Intercept composite requests when pool is active
+				if (
+					pool !== undefined &&
+					compositeNonce !== undefined &&
+					lineStr.includes('"composite_request"')
+				) {
+					const compositeReq = parseCompositeRequest(lineStr);
+					if (compositeReq !== null) {
+						if (!validateNonce(compositeReq, compositeNonce)) {
+							console.warn(
+								`[sandcaster] Rejecting composite_request with invalid nonce (id=${compositeReq.id})`,
+							);
+							continue;
+						}
+
+						// Validate request ID to prevent shell injection
+						if (!/^[a-zA-Z0-9_-]+$/.test(compositeReq.id)) {
+							console.warn(
+								`[sandcaster] Rejecting composite_request with invalid id`,
+							);
+							continue;
+						}
+
+						// Handle the request and write IPC response
+						let response: Parameters<typeof serializeCompositeResponse>[0];
+						try {
+							response = await handleCompositeRequest(pool, compositeReq);
+						} catch (err) {
+							response = {
+								type: "composite_response",
+								id: compositeReq.id,
+								ok: false,
+								error: err instanceof Error ? err.message : String(err),
+							};
+						}
+
+						// Atomic write-rename
+						const tmpPath = ipcTempPath(compositeReq.id);
+						const finalPath = ipcResponsePath(compositeReq.id);
+						await instance.files.write(
+							tmpPath,
+							serializeCompositeResponse(response),
+						);
+						await instance.commands.run(
+							`mv ${shellQuote(tmpPath)} ${shellQuote(finalPath)}`,
+						);
+
+						continue; // Do not yield composite requests as events
+					}
+				}
+
 				try {
 					const event = JSON.parse(lineStr) as SandcasterEvent;
+					// Tag tool_use / tool_result events with sandbox: "primary" when
+					// composite is active. If the event already has a sandbox field,
+					// preserve it (don't overwrite).
+					if (compositeActive) {
+						if (
+							(event.type === "tool_use" || event.type === "tool_result") &&
+							event.sandbox === undefined
+						) {
+							(event as typeof event & { sandbox: string }).sandbox = "primary";
+						}
+					}
 					yield event;
 				} catch {
 					yield {
@@ -335,7 +502,7 @@ export async function* runAgentInSandbox(
 			const errMsg =
 				streamErr instanceof Error ? streamErr.message : String(streamErr);
 			const detail = _stderrBuffer.trim()
-				? `${errMsg}\nstderr: ${_stderrBuffer.trim().slice(0, 500)}`
+				? `${errMsg}\nstderr: ${_stderrBuffer.trim()}`
 				: errMsg;
 			yield {
 				type: "error",
@@ -367,6 +534,129 @@ export async function* runAgentInSandbox(
 		// ------------------------------------------------------------------
 		// 12. Kill sandbox (always, guaranteed cleanup — FR-9)
 		// ------------------------------------------------------------------
-		await instance.kill();
+
+		// Remove SIGTERM handler to prevent leaks
+		if (sigTermHandler !== undefined) {
+			process.off("SIGTERM", sigTermHandler);
+		}
+
+		if (pool !== undefined) {
+			await pool.killAll();
+		} else {
+			await instance.kill();
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handleCompositeRequest — dispatch IPC action to the pool
+// ---------------------------------------------------------------------------
+
+async function handleCompositeRequest(
+	pool: SandboxPool,
+	req: ReturnType<typeof parseCompositeRequest> & {},
+): Promise<Parameters<typeof serializeCompositeResponse>[0]> {
+	switch (req.action) {
+		case "spawn": {
+			if (!req.name || !req.provider) {
+				return {
+					type: "composite_response",
+					id: req.id,
+					ok: false,
+					error: "spawn requires name and provider",
+				};
+			}
+			const spawned = await pool.spawn(
+				req.name,
+				req.provider as Parameters<
+					InstanceType<typeof SandboxPool>["spawn"]
+				>[1],
+				req.template,
+			);
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: true,
+				workDir: spawned.workDir,
+			};
+		}
+
+		case "exec": {
+			if (!req.name || !req.command) {
+				return {
+					type: "composite_response",
+					id: req.id,
+					ok: false,
+					error: "exec requires name and command",
+				};
+			}
+			const result = await pool.execIn(req.name, req.command, {
+				timeoutMs: req.timeout,
+			});
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: true,
+				result,
+			};
+		}
+
+		case "transfer": {
+			if (!req.from || !req.to || !req.paths) {
+				return {
+					type: "composite_response",
+					id: req.id,
+					ok: false,
+					error: "transfer requires from, to, and paths",
+				};
+			}
+			const transferResult = await pool.transferFiles(
+				req.from,
+				req.to,
+				req.paths,
+			);
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: true,
+				result: transferResult,
+			};
+		}
+
+		case "kill": {
+			if (!req.name) {
+				return {
+					type: "composite_response",
+					id: req.id,
+					ok: false,
+					error: "kill requires name",
+				};
+			}
+			await pool.kill(req.name);
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: true,
+			};
+		}
+
+		case "list": {
+			const list = pool.listSandboxes();
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: true,
+				result: list,
+			};
+		}
+
+		default: {
+			return {
+				type: "composite_response",
+				id: req.id,
+				ok: false,
+				error: `Unknown action: ${(req as { action: string }).action}`,
+			};
+		}
 	}
 }

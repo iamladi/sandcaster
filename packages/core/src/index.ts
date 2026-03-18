@@ -3,6 +3,7 @@ export * from "./config.js";
 export * from "./errors.js";
 export * from "./files.js";
 export * from "./sandbox.js";
+export * from "./sandbox-pool.js";
 export * from "./sandbox-provider.js";
 export * from "./sandbox-registry.js";
 export * from "./sandbox-resolver.js";

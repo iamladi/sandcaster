@@ -277,6 +277,184 @@ describe("SandcasterConfigSchema", () => {
 		});
 		expect(result.success).toBe(false);
 	});
+
+	it("accepts a valid composite config", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: {
+				maxSandboxes: 5,
+				maxTotalSpawns: 20,
+				allowedProviders: ["e2b", "docker"],
+				pollIntervalMs: 100,
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("composite defaults maxSandboxes to 3 when omitted", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: {},
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite?.maxSandboxes).toBe(3);
+		}
+	});
+
+	it("composite defaults maxTotalSpawns to 10 when omitted", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: {},
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite?.maxTotalSpawns).toBe(10);
+		}
+	});
+
+	it("composite defaults pollIntervalMs to 50 when omitted", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: {},
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite?.pollIntervalMs).toBe(50);
+		}
+	});
+
+	it("composite defaults allowedProviders to all providers when omitted", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: {},
+		});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite?.allowedProviders).toEqual(
+				expect.arrayContaining(["e2b", "vercel", "docker", "cloudflare"]),
+			);
+		}
+	});
+
+	it("composite rejects maxSandboxes above 20", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { maxSandboxes: 21 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("composite rejects maxSandboxes of 0", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { maxSandboxes: 0 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("composite rejects maxTotalSpawns above 100", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { maxTotalSpawns: 101 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("composite rejects pollIntervalMs below 10", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { pollIntervalMs: 9 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("composite rejects pollIntervalMs above 1000", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { pollIntervalMs: 1001 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("composite rejects unknown provider values", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			composite: { allowedProviders: ["unknown"] },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("omitting composite field entirely is valid", () => {
+		const result = SandcasterConfigSchema.safeParse({});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite).toBeUndefined();
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// QueryRequestSchema — composite field
+// ---------------------------------------------------------------------------
+
+describe("QueryRequestSchema — composite field", () => {
+	it("accepts a request with a composite field", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: {
+				maxSandboxes: 2,
+				maxTotalSpawns: 5,
+				allowedProviders: ["e2b"],
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts composite with only maxSandboxes", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: { maxSandboxes: 1 },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts composite with only allowedProviders", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: { allowedProviders: ["docker", "vercel"] },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts an empty composite object", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: {},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("omitting composite is valid", () => {
+		const result = QueryRequestSchema.safeParse({ prompt: "test" });
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.composite).toBeUndefined();
+		}
+	});
+
+	it("rejects composite maxSandboxes of 0", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: { maxSandboxes: 0 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects composite maxTotalSpawns of 0", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: { maxTotalSpawns: 0 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects unknown sandbox provider in composite allowedProviders", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			composite: { allowedProviders: ["unknown-provider"] },
+		});
+		expect(result.success).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -465,6 +643,88 @@ describe("SandcasterEventSchema", () => {
 			content: "test",
 		});
 		expect(result.success).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SandcasterEventSchema — sandbox field on tool_use and tool_result
+// ---------------------------------------------------------------------------
+
+describe("SandcasterEventSchema — sandbox field", () => {
+	it("tool_use event accepts an optional sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+			sandbox: "primary",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBe("primary");
+		}
+	});
+
+	it("tool_use event is valid without the sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "bash",
+			content: '{"command":"ls"}',
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBeUndefined();
+		}
+	});
+
+	it("tool_use event accepts an arbitrary sandbox name string", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_use",
+			toolName: "exec_in",
+			content: "{}",
+			sandbox: "worker-1",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_use") {
+			expect(result.data.sandbox).toBe("worker-1");
+		}
+	});
+
+	it("tool_result event accepts an optional sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "bash",
+			sandbox: "primary",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBe("primary");
+		}
+	});
+
+	it("tool_result event is valid without the sandbox field", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "bash",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBeUndefined();
+		}
+	});
+
+	it("tool_result event accepts an arbitrary sandbox name string", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "tool_result",
+			content: "output",
+			toolName: "exec_in",
+			sandbox: "worker-2",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "tool_result") {
+			expect(result.data.sandbox).toBe("worker-2");
+		}
 	});
 });
 

@@ -17,7 +17,10 @@ export type ResolveResult =
 // Provider-to-env-var mapping
 // ---------------------------------------------------------------------------
 
-const PROVIDER_ENV_VARS: Record<SandboxProviderName, string | undefined> = {
+export const PROVIDER_ENV_VARS: Record<
+	SandboxProviderName,
+	string | undefined
+> = {
 	e2b: "E2B_API_KEY",
 	vercel: "VERCEL_TOKEN",
 	cloudflare: "CLOUDFLARE_API_TOKEN",

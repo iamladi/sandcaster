@@ -61,14 +61,23 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 			return <Text>{event.content}</Text>;
 
 		case "tool_use":
-			return <Text dimColor>{`[tool: ${event.toolName}]`}</Text>;
+			return (
+				<Text dimColor>
+					{event.sandbox ? `[${event.sandbox}] ` : ""}[tool: {event.toolName}]
+				</Text>
+			);
 
 		case "tool_result": {
 			const content =
 				event.content.length > 200
 					? event.content.slice(0, 200)
 					: event.content;
-			return <Text dimColor>{content}</Text>;
+			return (
+				<Text dimColor>
+					{event.sandbox ? `[${event.sandbox}] ` : ""}
+					{content}
+				</Text>
+			);
 		}
 
 		case "thinking":
