@@ -35,12 +35,12 @@ export class SandcasterClient {
 		return {};
 	}
 
-	// -------------------------------------------------------------------------
-	// query()
-	// -------------------------------------------------------------------------
-
-	query(
-		request: QueryRequest,
+	/**
+	 * Build an AsyncIterable that lazily opens an SSE connection on first pull.
+	 * Handles abort-controller wiring, cleanup, and generator lifecycle.
+	 */
+	#makeSSEIterable(
+		fetchFn: (signal: AbortSignal) => Promise<Response>,
 		options?: { signal?: AbortSignal },
 	): AsyncIterable<SandcasterEvent> {
 		const self = this;
@@ -49,7 +49,6 @@ export class SandcasterClient {
 				const controller = new AbortController();
 				self.#activeControllers.add(controller);
 
-				// Link external signal to internal controller
 				let abortHandler: (() => void) | null = null;
 				if (options?.signal) {
 					if (options.signal.aborted) {
@@ -78,15 +77,7 @@ export class SandcasterClient {
 				> => {
 					if (!generatorPromise) {
 						generatorPromise = (async () => {
-							const response = await fetch(`${self.#baseUrl}/query`, {
-								method: "POST",
-								headers: {
-									"Content-Type": "application/json",
-									...self.#authHeaders(),
-								},
-								body: JSON.stringify(request),
-								signal: controller.signal,
-							});
+							const response = await fetchFn(controller.signal);
 
 							if (!response.ok) {
 								throw new Error(`${response.status} ${response.statusText}`);
@@ -124,8 +115,7 @@ export class SandcasterClient {
 								const gen = await generatorPromise;
 								await gen.return(value);
 							} catch {
-								// generatorPromise may have rejected (e.g. fetch failure) —
-								// return() must always succeed cleanly
+								// generatorPromise may have rejected — return() must succeed
 							}
 						}
 						return { done: true, value: undefined };
@@ -139,7 +129,7 @@ export class SandcasterClient {
 								const gen = await generatorPromise;
 								return gen.throw(error);
 							} catch {
-								// generatorPromise rejected; fall through to re-throw caller's error
+								// generatorPromise rejected; fall through
 							}
 						}
 						throw error;
@@ -147,6 +137,29 @@ export class SandcasterClient {
 				};
 			},
 		};
+	}
+
+	// -------------------------------------------------------------------------
+	// query()
+	// -------------------------------------------------------------------------
+
+	query(
+		request: QueryRequest,
+		options?: { signal?: AbortSignal },
+	): AsyncIterable<SandcasterEvent> {
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/query`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
+					},
+					body: JSON.stringify(request),
+					signal,
+				}),
+			options,
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -191,108 +204,19 @@ export class SandcasterClient {
 		request: SessionCreateRequest,
 		options?: { signal?: AbortSignal },
 	): AsyncIterable<SandcasterEvent> {
-		const self = this;
-		return {
-			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
-				const controller = new AbortController();
-				self.#activeControllers.add(controller);
-
-				let abortHandler: (() => void) | null = null;
-				if (options?.signal) {
-					if (options.signal.aborted) {
-						controller.abort(options.signal.reason);
-					} else {
-						abortHandler = () => controller.abort(options.signal?.reason);
-						options.signal.addEventListener("abort", abortHandler, {
-							once: true,
-						});
-					}
-				}
-
-				const cleanup = () => {
-					self.#activeControllers.delete(controller);
-					if (abortHandler) {
-						options?.signal?.removeEventListener("abort", abortHandler);
-						abortHandler = null;
-					}
-				};
-
-				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
-					null;
-
-				const ensureGenerator = (): Promise<
-					AsyncGenerator<SandcasterEvent>
-				> => {
-					if (!generatorPromise) {
-						generatorPromise = (async () => {
-							const response = await fetch(`${self.#baseUrl}/sessions`, {
-								method: "POST",
-								headers: {
-									"Content-Type": "application/json",
-									...self.#authHeaders(),
-								},
-								body: JSON.stringify(request),
-								signal: controller.signal,
-							});
-
-							if (!response.ok) {
-								throw new Error(`${response.status} ${response.statusText}`);
-							}
-
-							return parseSSEStream(
-								response.body as ReadableStream<Uint8Array>,
-								controller.signal,
-							);
-						})();
-					}
-					return generatorPromise;
-				};
-
-				return {
-					async next(): Promise<IteratorResult<SandcasterEvent>> {
-						try {
-							const gen = await ensureGenerator();
-							const result = await gen.next();
-							if (result.done) {
-								cleanup();
-							}
-							return result;
-						} catch (error) {
-							cleanup();
-							throw error;
-						}
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
 					},
-					async return(
-						value?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								await gen.return(value);
-							} catch {
-								// ignore
-							}
-						}
-						return { done: true, value: undefined };
-					},
-					async throw(
-						error?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								return gen.throw(error);
-							} catch {
-								// ignore
-							}
-						}
-						throw error;
-					},
-				};
-			},
-		};
+					body: JSON.stringify(request),
+					signal,
+				}),
+			options,
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -304,111 +228,19 @@ export class SandcasterClient {
 		message: SessionMessageRequest,
 		options?: { signal?: AbortSignal },
 	): AsyncIterable<SandcasterEvent> {
-		const self = this;
-		return {
-			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
-				const controller = new AbortController();
-				self.#activeControllers.add(controller);
-
-				let abortHandler: (() => void) | null = null;
-				if (options?.signal) {
-					if (options.signal.aborted) {
-						controller.abort(options.signal.reason);
-					} else {
-						abortHandler = () => controller.abort(options.signal?.reason);
-						options.signal.addEventListener("abort", abortHandler, {
-							once: true,
-						});
-					}
-				}
-
-				const cleanup = () => {
-					self.#activeControllers.delete(controller);
-					if (abortHandler) {
-						options?.signal?.removeEventListener("abort", abortHandler);
-						abortHandler = null;
-					}
-				};
-
-				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
-					null;
-
-				const ensureGenerator = (): Promise<
-					AsyncGenerator<SandcasterEvent>
-				> => {
-					if (!generatorPromise) {
-						generatorPromise = (async () => {
-							const response = await fetch(
-								`${self.#baseUrl}/sessions/${sessionId}/messages`,
-								{
-									method: "POST",
-									headers: {
-										"Content-Type": "application/json",
-										...self.#authHeaders(),
-									},
-									body: JSON.stringify(message),
-									signal: controller.signal,
-								},
-							);
-
-							if (!response.ok) {
-								throw new Error(`${response.status} ${response.statusText}`);
-							}
-
-							return parseSSEStream(
-								response.body as ReadableStream<Uint8Array>,
-								controller.signal,
-							);
-						})();
-					}
-					return generatorPromise;
-				};
-
-				return {
-					async next(): Promise<IteratorResult<SandcasterEvent>> {
-						try {
-							const gen = await ensureGenerator();
-							const result = await gen.next();
-							if (result.done) {
-								cleanup();
-							}
-							return result;
-						} catch (error) {
-							cleanup();
-							throw error;
-						}
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions/${sessionId}/messages`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						...this.#authHeaders(),
 					},
-					async return(
-						value?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								await gen.return(value);
-							} catch {
-								// ignore
-							}
-						}
-						return { done: true, value: undefined };
-					},
-					async throw(
-						error?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								return gen.throw(error);
-							} catch {
-								// ignore
-							}
-						}
-						throw error;
-					},
-				};
-			},
-		};
+					body: JSON.stringify(message),
+					signal,
+				}),
+			options,
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -419,107 +251,15 @@ export class SandcasterClient {
 		id: string,
 		options?: { signal?: AbortSignal },
 	): AsyncIterable<SandcasterEvent> {
-		const self = this;
-		return {
-			[Symbol.asyncIterator](): AsyncIterator<SandcasterEvent> {
-				const controller = new AbortController();
-				self.#activeControllers.add(controller);
-
-				let abortHandler: (() => void) | null = null;
-				if (options?.signal) {
-					if (options.signal.aborted) {
-						controller.abort(options.signal.reason);
-					} else {
-						abortHandler = () => controller.abort(options.signal?.reason);
-						options.signal.addEventListener("abort", abortHandler, {
-							once: true,
-						});
-					}
-				}
-
-				const cleanup = () => {
-					self.#activeControllers.delete(controller);
-					if (abortHandler) {
-						options?.signal?.removeEventListener("abort", abortHandler);
-						abortHandler = null;
-					}
-				};
-
-				let generatorPromise: Promise<AsyncGenerator<SandcasterEvent>> | null =
-					null;
-
-				const ensureGenerator = (): Promise<
-					AsyncGenerator<SandcasterEvent>
-				> => {
-					if (!generatorPromise) {
-						generatorPromise = (async () => {
-							const response = await fetch(
-								`${self.#baseUrl}/sessions/${id}/events`,
-								{
-									method: "GET",
-									headers: { ...self.#authHeaders() },
-									signal: controller.signal,
-								},
-							);
-
-							if (!response.ok) {
-								throw new Error(`${response.status} ${response.statusText}`);
-							}
-
-							return parseSSEStream(
-								response.body as ReadableStream<Uint8Array>,
-								controller.signal,
-							);
-						})();
-					}
-					return generatorPromise;
-				};
-
-				return {
-					async next(): Promise<IteratorResult<SandcasterEvent>> {
-						try {
-							const gen = await ensureGenerator();
-							const result = await gen.next();
-							if (result.done) {
-								cleanup();
-							}
-							return result;
-						} catch (error) {
-							cleanup();
-							throw error;
-						}
-					},
-					async return(
-						value?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								await gen.return(value);
-							} catch {
-								// ignore
-							}
-						}
-						return { done: true, value: undefined };
-					},
-					async throw(
-						error?: unknown,
-					): Promise<IteratorResult<SandcasterEvent>> {
-						cleanup();
-						if (generatorPromise) {
-							try {
-								const gen = await generatorPromise;
-								return gen.throw(error);
-							} catch {
-								// ignore
-							}
-						}
-						throw error;
-					},
-				};
-			},
-		};
+		return this.#makeSSEIterable(
+			(signal) =>
+				fetch(`${this.#baseUrl}/sessions/${id}/events`, {
+					method: "GET",
+					headers: { ...this.#authHeaders() },
+					signal,
+				}),
+			options,
+		);
 	}
 
 	// -------------------------------------------------------------------------

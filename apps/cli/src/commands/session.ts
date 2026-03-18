@@ -14,13 +14,20 @@ export interface SessionCommandDeps {
 // Core logic (injectable for testing)
 // ---------------------------------------------------------------------------
 
+function buildHeaders(
+	apiKey?: string,
+	contentType?: string,
+): Record<string, string> {
+	const headers: Record<string, string> = {};
+	if (contentType) headers["Content-Type"] = contentType;
+	if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+	return headers;
+}
+
 export async function executeSessionList(
 	deps: SessionCommandDeps,
 ): Promise<void> {
-	const headers: Record<string, string> = {
-		"Content-Type": "application/json",
-	};
-	if (deps.apiKey) headers.Authorization = `Bearer ${deps.apiKey}`;
+	const headers = buildHeaders(deps.apiKey, "application/json");
 
 	const res = await fetch(`${deps.baseUrl}/sessions`, { headers });
 	if (!res.ok) {
@@ -56,8 +63,7 @@ export async function executeSessionDelete(
 	sessionId: string,
 	deps: SessionCommandDeps,
 ): Promise<void> {
-	const headers: Record<string, string> = {};
-	if (deps.apiKey) headers.Authorization = `Bearer ${deps.apiKey}`;
+	const headers = buildHeaders(deps.apiKey);
 
 	const res = await fetch(`${deps.baseUrl}/sessions/${sessionId}`, {
 		method: "DELETE",
@@ -76,8 +82,7 @@ export async function executeSessionAttach(
 	sessionId: string,
 	deps: SessionCommandDeps,
 ): Promise<void> {
-	const headers: Record<string, string> = {};
-	if (deps.apiKey) headers.Authorization = `Bearer ${deps.apiKey}`;
+	const headers = buildHeaders(deps.apiKey);
 
 	const res = await fetch(`${deps.baseUrl}/sessions/${sessionId}/events`, {
 		headers,

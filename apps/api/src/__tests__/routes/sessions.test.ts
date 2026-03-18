@@ -206,6 +206,26 @@ describe("POST /sessions/:id/messages", () => {
 		expect(res.status).toBe(400);
 	});
 
+	test("falls through to sendMessage for unrecognized slash-prefixed prompts", async () => {
+		const sessionManager = createTestSessionManager();
+		const app = createApp({ sessionManager });
+
+		const createRes = await postSession(app, { prompt: "init" });
+		const createText = await createRes.text();
+		const match = createText.match(/"sessionId":"([^"]+)"/);
+		const sessionId = match?.[1] as string;
+
+		// /unknown is not a valid command — should be processed as a regular message
+		const res = await postMessage(app, sessionId, {
+			prompt: "/unknown-command",
+		});
+
+		expect(res.status).toBe(200);
+		const text = await res.text();
+		// Should have agent events (assistant/result), NOT an empty stream
+		expect(text).toContain("event: assistant");
+	});
+
 	test("detects /status command and returns session_command_result event", async () => {
 		const sessionManager = createTestSessionManager();
 		const app = createApp({ sessionManager });

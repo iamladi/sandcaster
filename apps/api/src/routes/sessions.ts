@@ -1,4 +1,4 @@
-import type { SessionManager } from "@sandcaster/core";
+import type { SandcasterEvent, SessionManager } from "@sandcaster/core";
 import {
 	loadConfig,
 	parseSessionCommand,
@@ -6,8 +6,30 @@ import {
 	SessionError,
 	SessionMessageRequestSchema,
 } from "@sandcaster/core";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
+import type { SSEStreamingApi } from "hono/streaming";
 import { streamSSE } from "hono/streaming";
+
+/** Drain an event iterable into an SSE stream. */
+async function _drainEventsToSSE(
+	c: Context,
+	stream: SSEStreamingApi,
+	events: AsyncIterable<SandcasterEvent>,
+): Promise<void> {
+	c.header("Content-Encoding", "Identity");
+	for await (const event of events) {
+		await stream.writeSSE({
+			event: event.type,
+			data: JSON.stringify(event),
+		});
+	}
+}
+
+/** Parse a limit query param consistently with runs.ts */
+function _parseLimit(raw: string | undefined): number {
+	const n = Number.parseInt(raw ?? "50", 10);
+	return Number.isNaN(n) ? 50 : Math.max(1, Math.min(n, 200));
+}
 
 export function registerSessionRoutes(
 	app: Hono,
@@ -47,13 +69,7 @@ export function registerSessionRoutes(
 			return streamSSE(
 				c,
 				async (stream) => {
-					c.header("Content-Encoding", "Identity");
-					for await (const event of events) {
-						await stream.writeSSE({
-							event: event.type,
-							data: JSON.stringify(event),
-						});
-					}
+					await _drainEventsToSSE(c, stream, events);
 				},
 				async (err) => {
 					console.error("Session SSE error:", err);
@@ -93,22 +109,15 @@ export function registerSessionRoutes(
 			);
 		}
 
-		// Check if the prompt is a slash-command — execute via SessionManager (mutex-protected)
-		const command = parseSessionCommand(parsed.data.prompt);
-		if (command) {
+		// Check if the prompt is a recognized slash-command — only route known commands
+		if (parseSessionCommand(parsed.data.prompt)) {
 			try {
 				const events = sessionManager.handleCommand(
 					sessionId,
 					parsed.data.prompt,
 				);
 				return streamSSE(c, async (stream) => {
-					c.header("Content-Encoding", "Identity");
-					for await (const event of events) {
-						await stream.writeSSE({
-							event: event.type,
-							data: JSON.stringify(event),
-						});
-					}
+					await _drainEventsToSSE(c, stream, events);
 				});
 			} catch (err) {
 				if (err instanceof SessionError) {
@@ -132,13 +141,7 @@ export function registerSessionRoutes(
 			});
 
 			return streamSSE(c, async (stream) => {
-				c.header("Content-Encoding", "Identity");
-				for await (const event of events) {
-					await stream.writeSSE({
-						event: event.type,
-						data: JSON.stringify(event),
-					});
-				}
+				await _drainEventsToSSE(c, stream, events);
 			});
 		} catch (err) {
 			if (err instanceof SessionError) {
@@ -161,8 +164,7 @@ export function registerSessionRoutes(
 	// -------------------------------------------------------------------------
 
 	app.get("/sessions", (c) => {
-		const limitParam = c.req.query("limit");
-		const limit = limitParam ? Math.min(Number(limitParam) || 50, 200) : 50;
+		const limit = _parseLimit(c.req.query("limit"));
 		const sessions = sessionManager.listSessions(limit);
 		return c.json(sessions);
 	});
