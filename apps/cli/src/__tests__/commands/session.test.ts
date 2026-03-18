@@ -27,16 +27,17 @@ function createSSEBody(
 // ---------------------------------------------------------------------------
 
 let fetchMock: ReturnType<typeof vi.fn>;
-let stdout: { write: ReturnType<typeof vi.fn>; output: string };
+let stdout: { write: (data: string) => boolean; output: string };
 
 beforeEach(() => {
 	fetchMock = vi.fn();
 	vi.stubGlobal("fetch", fetchMock);
+	const writeFn = (data: string): boolean => {
+		stdout.output += data;
+		return true;
+	};
 	stdout = {
-		write: vi.fn((data: string) => {
-			stdout.output += data;
-			return true;
-		}),
+		write: writeFn,
 		output: "",
 	};
 });
