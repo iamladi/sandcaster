@@ -31,6 +31,12 @@ export interface ActiveSession {
 export interface SessionManagerOptions {
 	store: ISessionStore;
 	sandboxFactory: SessionSandboxFactory;
+	runAgent?: (
+		instance: SandboxInstance,
+		request: import("../schemas.js").QueryRequest,
+		config?: import("../schemas.js").SandcasterConfig,
+		signal?: AbortSignal,
+	) => AsyncGenerator<SandcasterEvent>;
 	idleTimeoutMs?: number;
 	maxActiveSessions?: number;
 	maxHistoryTurns?: number;
