@@ -65,37 +65,43 @@ function buildBranchPrompt(
 	return alternativePrompt;
 }
 
-/** Merge parent config with per-branch overrides, without branching_enabled */
+/** Build per-branch config, stripping branching to prevent recursion */
 function buildBranchConfig(
 	parentConfig: SandcasterConfig | undefined,
 	branchIndex: number,
-): SandcasterConfig {
+): { config: SandcasterConfig; requestOverrides: Partial<QueryRequest> } {
 	const base: SandcasterConfig = { ...parentConfig };
-
-	// Strip branching from branch configs to prevent recursive branching
 	delete base.branching;
 
 	const overrides = parentConfig?.branching?.branches?.[branchIndex];
+	const requestOverrides: Partial<QueryRequest> = {};
 
 	if (overrides) {
 		if (overrides.model) base.model = overrides.model;
 		if (overrides.provider) {
-			// provider is on QueryRequest not SandcasterConfig, but we'll type-cast here
-			// as the spec says to merge provider override
-			(base as Record<string, unknown>).provider = overrides.provider;
+			requestOverrides.provider =
+				overrides.provider as QueryRequest["provider"];
 		}
 		if (overrides.sandboxProvider) {
-			(base as Record<string, unknown>).sandboxProvider =
-				overrides.sandboxProvider;
+			requestOverrides.sandboxProvider =
+				overrides.sandboxProvider as QueryRequest["sandboxProvider"];
 		}
 	}
 
-	return base;
+	return { config: base, requestOverrides };
 }
 
 // ---------------------------------------------------------------------------
-// Branch execution
+// Branch execution with progress reporting
 // ---------------------------------------------------------------------------
+
+interface ProgressReport {
+	branchId: string;
+	branchIndex: number;
+	status: "running" | "completed" | "error";
+	numTurns?: number;
+	costUsd?: number;
+}
 
 async function runSingleBranch(
 	branchId: string,
@@ -107,16 +113,23 @@ async function runSingleBranch(
 	runAgent: BranchRunOptions["runAgent"],
 	remainingTimeout: number | undefined,
 	signal: AbortSignal,
+	onProgress: (report: ProgressReport) => void,
 ): Promise<BranchResult> {
 	const branchPrompt = buildBranchPrompt(prompt, contextEvents);
-	const branchConfig = buildBranchConfig(parentConfig, branchIndex);
+	const { config: branchConfig, requestOverrides } = buildBranchConfig(
+		parentConfig,
+		branchIndex,
+	);
 
 	if (remainingTimeout !== undefined) {
 		branchConfig.timeout = Math.max(1, Math.floor(remainingTimeout));
 	}
 
+	// Strip branching from request too (recursive guard)
+	const { branching: _strip, ...cleanRequest } = parentRequest;
 	const branchRequest: QueryRequest = {
-		...parentRequest,
+		...cleanRequest,
+		...requestOverrides,
 		prompt: branchPrompt,
 	};
 
@@ -124,6 +137,7 @@ async function runSingleBranch(
 	let finalContent = "";
 	let costUsd: number | undefined;
 	let numTurns: number | undefined;
+	let turnCount = 0;
 
 	try {
 		const gen = runAgent({
@@ -137,11 +151,37 @@ async function runSingleBranch(
 				break;
 			}
 			events.push(event);
+
+			// Track turns and cost for progress
+			if (event.type === "tool_result" || event.type === "assistant") {
+				turnCount++;
+				onProgress({
+					branchId,
+					branchIndex,
+					status: "running",
+					numTurns: turnCount,
+					costUsd,
+				});
+			}
+
 			if (event.type === "result") {
 				finalContent = event.content;
 				costUsd = event.costUsd;
 				numTurns = event.numTurns;
 			}
+		}
+
+		// Fix P1: aborted branches must not return "success"
+		if (signal.aborted) {
+			return {
+				branchId,
+				branchIndex,
+				events,
+				finalContent: finalContent || "Branch aborted",
+				costUsd,
+				numTurns,
+				status: "error",
+			};
 		}
 
 		return {
@@ -231,7 +271,6 @@ export async function* runBranchedAgent(
 
 		if (event.type === "branch_request") {
 			branchRequestEvent = event;
-			// Stop yielding initial events — we'll branch now
 			break;
 		}
 
@@ -270,7 +309,6 @@ export async function* runBranchedAgent(
 
 	// Confidence trigger fired: drain the rest of the initial run then branch
 	if (confidenceTriggerAlternatives) {
-		// Drain remaining events from initial gen (discard after trigger)
 		for await (const _event of initialGen) {
 			if (parentSignal?.aborted) {
 				await initialGen.return(undefined);
@@ -304,10 +342,8 @@ export async function* runBranchedAgent(
 	}
 
 	// --- Explicit branch_request trigger ---
-
-	const alternatives = branchRequestEvent.alternatives;
 	return yield* runBranchingPath(
-		alternatives,
+		branchRequestEvent.alternatives,
 		contextEvents,
 		config,
 		request,
@@ -347,22 +383,31 @@ async function* runBranchingPath(
 	// Create a combined abort controller for all branches
 	const branchAbortController = new AbortController();
 	if (parentSignal) {
-		parentSignal.addEventListener(
-			"abort",
-			() => branchAbortController.abort(),
-			{
-				once: true,
-			},
-		);
+		// Fix P1: handle already-aborted signal
+		if (parentSignal.aborted) {
+			branchAbortController.abort();
+		} else {
+			parentSignal.addEventListener(
+				"abort",
+				() => branchAbortController.abort(),
+				{ once: true },
+			);
+		}
 	}
 
 	// Generate branch IDs upfront
 	const branchIds = alternatives.map((_, i) => generateBranchId(i));
 
+	// Shared progress queue — branches push progress here, orchestrator yields them
+	const progressQueue: SandcasterEvent[] = [];
+
 	// Emit branch_start events and start branches with stagger
 	const branchPromises: Promise<BranchResult>[] = [];
 
 	for (let i = 0; i < alternatives.length; i++) {
+		// Fix P1: check abort before starting new branches
+		if (branchAbortController.signal.aborted) break;
+
 		const branchId = branchIds[i];
 		const alternative = alternatives[i];
 
@@ -377,6 +422,8 @@ async function* runBranchingPath(
 		// Stagger: delay before starting the next branch
 		if (i > 0 && staggerDelayMs > 0) {
 			await new Promise((r) => setTimeout(r, staggerDelayMs));
+			// Check abort after stagger wait
+			if (branchAbortController.signal.aborted) break;
 		}
 
 		const branchPromise = runSingleBranch(
@@ -389,13 +436,40 @@ async function* runBranchingPath(
 			runAgent,
 			remainingTimeout,
 			branchAbortController.signal,
+			(report) => {
+				progressQueue.push({
+					type: "branch_progress",
+					...report,
+				});
+			},
 		);
 
 		branchPromises.push(branchPromise);
 	}
 
-	// Wait for all branches to complete
-	const settled = await Promise.allSettled(branchPromises);
+	// Fix P0: Yield progress events while waiting for branches to complete
+	const allDone = Promise.allSettled(branchPromises);
+	let resolved = false;
+	const markResolved = allDone.then(() => {
+		resolved = true;
+	});
+
+	while (!resolved) {
+		// Yield queued progress events
+		while (progressQueue.length > 0) {
+			yield progressQueue.shift()!;
+		}
+
+		// Wait for either completion or a tick (500ms)
+		await Promise.race([markResolved, new Promise((r) => setTimeout(r, 500))]);
+	}
+
+	// Flush remaining progress events
+	while (progressQueue.length > 0) {
+		yield progressQueue.shift()!;
+	}
+
+	const settled = await allDone;
 
 	// Collect results
 	const results: BranchResult[] = [];
@@ -409,8 +483,7 @@ async function* runBranchingPath(
 			const result = outcome.value;
 			results.push(result);
 
-			const costUsd = result.costUsd ?? 0;
-			totalCostUsd += costUsd;
+			totalCostUsd += result.costUsd ?? 0;
 
 			yield {
 				type: "branch_complete",
@@ -421,7 +494,6 @@ async function* runBranchingPath(
 				content: result.finalContent || undefined,
 			};
 		} else {
-			// Promise itself rejected (shouldn't happen since runSingleBranch catches)
 			results.push({
 				branchId,
 				branchIndex: i,
@@ -473,7 +545,6 @@ async function* runBranchingPath(
 				successfulResults,
 			);
 
-			// Find the winner from eval result
 			const found = successfulResults.find(
 				(r) =>
 					r.branchId === evalResult.winnerId ||
@@ -486,7 +557,6 @@ async function* runBranchingPath(
 			scores = evalResult.scores;
 			evaluatorName = "evaluator";
 		} catch (err) {
-			// Evaluator failed: fallback to first successful branch
 			yield {
 				type: "warning",
 				content: `Evaluator failed: ${err instanceof Error ? err.message : String(err)}. Falling back to first successful branch.`,
@@ -503,10 +573,9 @@ async function* runBranchingPath(
 		scores,
 	};
 
-	// Yield winning branch's events
-	for (const event of winnerResult.events) {
-		yield event as SandcasterEvent;
-	}
+	// Fix P0: Do NOT re-yield winning branch events outside the envelope.
+	// The finalContent is already in branch_complete.content.
+	// Clients access full branch events via --no-tui JSON mode or /runs history.
 
 	// Emit branch_summary
 	yield {

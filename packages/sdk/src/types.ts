@@ -235,6 +235,10 @@ export interface Run {
 	filesCount: number;
 	feedback?: string;
 	feedbackUser?: string;
+	branchCount?: number;
+	branchWinnerId?: string;
+	branchCosts?: Record<string, number>;
+	evaluatorType?: string;
 }
 
 export interface Session {

@@ -141,7 +141,7 @@ describe("explicit branching: full lifecycle", () => {
 		expect(summaryIdx).toBeGreaterThan(selectedIdx);
 	});
 
-	it("winning branch events are replayed after branch_selected", async () => {
+	it("branch_selected is followed directly by branch_summary (no re-yielded events)", async () => {
 		const evaluator: Evaluator = {
 			evaluate: async (_prompt, results) => ({
 				winnerId: results[0].branchId,
@@ -158,18 +158,10 @@ describe("explicit branching: full lifecycle", () => {
 					type: "branch_request",
 					alternatives: ["path X", "path Y"],
 				};
-			} else if (callCount === 2) {
-				yield { type: "assistant", content: "Winner output" };
-				yield {
-					type: "result",
-					content: "Winner result",
-					costUsd: 0.01,
-					numTurns: 1,
-				};
 			} else {
 				yield {
 					type: "result",
-					content: "Loser result",
+					content: "Branch result",
 					costUsd: 0.01,
 					numTurns: 1,
 				};
@@ -185,21 +177,13 @@ describe("explicit branching: full lifecycle", () => {
 			}),
 		);
 
-		// After branch_selected, winner's events should appear
 		const types = events.map((e) => e.type);
 		const selectedIdx = types.indexOf("branch_selected");
 		const summaryIdx = types.indexOf("branch_summary");
 
-		// Events between selected and summary include winning branch's events
-		const betweenEvents = events.slice(selectedIdx + 1, summaryIdx);
-		const assistantBetween = betweenEvents.filter(
-			(e) => e.type === "assistant",
-		);
-		expect(assistantBetween.length).toBeGreaterThan(0);
-		expect(
-			(assistantBetween[0] as Extract<SandcasterEvent, { type: "assistant" }>)
-				.content,
-		).toBe("Winner output");
+		// branch_summary should follow branch_selected with no internal events in between
+		expect(selectedIdx).toBeGreaterThanOrEqual(0);
+		expect(summaryIdx).toBe(selectedIdx + 1);
 	});
 });
 
