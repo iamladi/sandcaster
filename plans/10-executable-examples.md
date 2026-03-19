@@ -1,7 +1,7 @@
 ---
 title: "Executable examples directory"
 type: Feature
-issue: null
+issue: 13
 research: ["research/research-executable-examples.md", "research/research-real-world-examples.md"]
 status: Ready for Implementation
 reviewed: true
