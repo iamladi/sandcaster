@@ -335,14 +335,17 @@ export async function* runAgentInSandbox(
 		process.once("SIGTERM", sigTermHandler);
 	}
 
+	// Runner directory — use instance.workDir so providers with restricted
+	// filesystems (e.g. Vercel) can write to a writable location.
+	const runnerDir = `${instance.workDir}/.sandcaster`;
+	const runnerPath = `${runnerDir}/runner.mjs`;
+	const configPath = `${runnerDir}/agent_config.json`;
+
 	try {
 		// ------------------------------------------------------------------
 		// 4. Upload runner bundle
 		// ------------------------------------------------------------------
-		await instance.files.write(
-			"/opt/sandcaster/runner.mjs",
-			_getRunnerBundle(),
-		);
+		await instance.files.write(runnerPath, _getRunnerBundle());
 
 		// ------------------------------------------------------------------
 		// 5. Upload agent config
@@ -357,10 +360,7 @@ export async function* runAgentInSandbox(
 					}
 				: undefined,
 		);
-		await instance.files.write(
-			"/opt/sandcaster/agent_config.json",
-			JSON.stringify(agentConfig),
-		);
+		await instance.files.write(configPath, JSON.stringify(agentConfig));
 
 		// ------------------------------------------------------------------
 		// 6. Upload user files
@@ -404,7 +404,7 @@ export async function* runAgentInSandbox(
 
 		// Run the command — when it resolves/rejects, we end the stream
 		const runPromise = instance.commands
-			.run("node /opt/sandcaster/runner.mjs", {
+			.run(`node ${runnerPath} ${configPath}`, {
 				timeoutMs: timeoutMs * 6, // give runner extra headroom
 				onStdout,
 				onStderr: (data: string) => {

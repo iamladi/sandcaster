@@ -9,6 +9,7 @@ const ALIAS_MAP: Record<string, { provider: string; modelId: string }> = {
 	opus: { provider: "anthropic", modelId: "claude-opus-4-6" },
 	haiku: { provider: "anthropic", modelId: "claude-haiku-4-5" },
 	gpt5: { provider: "openai", modelId: "gpt-5.4" },
+	gpt5mini: { provider: "openai", modelId: "gpt-5-mini" },
 	gemini: { provider: "google", modelId: "gemini-3.1-pro-preview" },
 };
 

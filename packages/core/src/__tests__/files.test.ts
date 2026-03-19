@@ -241,13 +241,13 @@ describe("uploadSkills", () => {
 // ---------------------------------------------------------------------------
 
 describe("createExtractionMarker", () => {
-	it("runs touch command for the marker file", async () => {
+	it("writes marker file via files.write", async () => {
 		const sbx = makeSandbox();
 		await createExtractionMarker(sbx as SandboxInstance, "req-123");
 
-		expect(sbx.commands.calls).toHaveLength(1);
-		expect(sbx.commands.calls[0].cmd).toContain("touch");
-		expect(sbx.commands.calls[0].cmd).toContain("req-123");
+		expect(sbx.files.writeCalls).toHaveLength(1);
+		expect(sbx.files.writeCalls[0].path).toContain("req-123");
+		expect(sbx.files.writeCalls[0].content).toBe("");
 	});
 
 	it("returns the marker file path", async () => {

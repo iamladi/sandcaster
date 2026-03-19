@@ -11,12 +11,10 @@ export default defineConfig({
 		emptyOutDir: false,
 		minify: false,
 		rollupOptions: {
-			external: [
-				"@mariozechner/pi-ai",
-				"@mariozechner/pi-agent-core",
-				"@sinclair/typebox",
-				/^node:/,
-			],
+			// Only Node built-ins are external — pi-mono packages are inlined
+			// so the runner is self-contained and works in any clean Node.js sandbox
+			// (E2B, Vercel, Docker) without pre-installed dependencies.
+			external: [/^node:/],
 		},
 	},
 });

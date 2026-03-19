@@ -75,7 +75,7 @@ function makeCompositeInstance(runnerLines: string[] = []): SandboxInstance & {
 				onStderr?: (data: string) => void;
 			},
 		) => {
-			if (cmd.startsWith("node ")) {
+			if (cmd.includes("node ")) {
 				for (const line of runnerLines) {
 					opts?.onStdout?.(`${line}\n`);
 				}
@@ -183,14 +183,14 @@ function installNonceCapture(
 
 	instance.files.write.mockImplementation(
 		async (path: string, content: string) => {
-			if (path === "/opt/sandcaster/agent_config.json") {
+			if (path === "/home/user/.sandcaster/agent_config.json") {
 				capturedNonce = JSON.parse(content).composite_nonce;
 
 				const lines = capturedNonce ? buildLines(capturedNonce) : [];
 
 				instance.commands.run.mockImplementation(
 					async (cmd: string, opts?: { onStdout?: (data: string) => void }) => {
-						if (cmd.startsWith("node ")) {
+						if (cmd.includes("node ")) {
 							for (const line of lines) {
 								opts?.onStdout?.(`${line}\n`);
 							}

@@ -187,6 +187,7 @@ Set a model alias in `sandcaster.json` or pass `--model`:
 | `opus` | `claude-opus-4-6` |
 | `haiku` | `claude-haiku-4-5` |
 | `gpt5` | `gpt-5.4` |
+| `gpt5mini` | `gpt-5-mini` |
 | `gemini` | `gemini-3.1-pro-preview` |
 
 If no model is specified, Sandcaster auto-detects from your API keys:

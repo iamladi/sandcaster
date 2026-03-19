@@ -141,7 +141,7 @@ export async function createExtractionMarker(
 	requestId: string,
 ): Promise<string> {
 	const markerPath = `/tmp/sandcaster-extract-${requestId}.marker`;
-	await sbx.commands.run(`touch ${shellQuote(markerPath)}`);
+	await sbx.files.write(markerPath, "");
 	return markerPath;
 }
 
@@ -162,8 +162,16 @@ export async function extractGeneratedFiles(
 
 	try {
 		// Find files newer than the marker, excluding dotfiles
+		// Some providers (Vercel) don't support shell commands — skip extraction
 		const findCmd = `find ${home} -path '*/.*' -prune -o -type f -cnewer ${shellQuote(markerPath)} -printf '%P\\t%s\\n'`;
-		const { stdout } = await sbx.commands.run(findCmd);
+		let stdout: string;
+		try {
+			const result = await sbx.commands.run(findCmd);
+			stdout = result.stdout;
+		} catch {
+			// Shell commands not available — skip file extraction
+			return [];
+		}
 
 		// Parse the find output into (relativePath, sizeBytes) pairs
 		type FileEntry = { path: string; size: number };
@@ -222,6 +230,10 @@ export async function extractGeneratedFiles(
 		return results;
 	} finally {
 		// Always clean up the marker file
-		await sbx.commands.run(`rm -f ${shellQuote(markerPath)}`);
+		try {
+			await sbx.commands.run(`rm -f ${shellQuote(markerPath)}`);
+		} catch {
+			// Ignore — some providers (Vercel) don't have rm
+		}
 	}
 }

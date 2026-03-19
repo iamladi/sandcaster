@@ -170,19 +170,19 @@ describe("runAgentInSandbox", () => {
 
 		// Runner file was uploaded
 		expect(instance.files.write).toHaveBeenCalledWith(
-			"/opt/sandcaster/runner.mjs",
+			"/home/user/.sandcaster/runner.mjs",
 			expect.any(String),
 		);
 
 		// Agent config was uploaded
 		expect(instance.files.write).toHaveBeenCalledWith(
-			"/opt/sandcaster/agent_config.json",
+			"/home/user/.sandcaster/agent_config.json",
 			expect.any(String),
 		);
 
 		// Runner was executed
 		expect(instance.commands.run).toHaveBeenCalledWith(
-			"node /opt/sandcaster/runner.mjs",
+			"node /home/user/.sandcaster/runner.mjs /home/user/.sandcaster/agent_config.json",
 			expect.any(Object),
 		);
 
@@ -335,10 +335,7 @@ describe("runAgentInSandbox", () => {
 
 	it("yields error event when no provider can be resolved (no API key)", async () => {
 		delete process.env.E2B_API_KEY;
-		// Don't register a provider — let resolver fall back to e2b with no key
-		// The sandbox.ts should handle the missing credential case
-		// After reset, provider.create will get undefined apiKey
-
+		// Force e2b provider — prevents Docker auto-detection on machines with Docker
 		const instance = makeFakeInstance([]);
 		// Register a fake provider that returns auth error when no apiKey
 		registerSandboxProvider("e2b", async () => ({
@@ -358,7 +355,7 @@ describe("runAgentInSandbox", () => {
 
 		const events = [];
 		for await (const event of runAgentInSandbox({
-			request: makeRequest({ apiKeys: {} }),
+			request: makeRequest({ apiKeys: {}, sandboxProvider: "e2b" }),
 		})) {
 			events.push(event);
 		}
@@ -547,7 +544,8 @@ describe("runAgentInSandbox", () => {
 		}
 
 		const configWriteCall = instance.files.write.mock.calls.find(
-			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
+			(call: string[]) =>
+				call[0] === "/home/user/.sandcaster/agent_config.json",
 		) as string[];
 		expect(configWriteCall).toBeDefined();
 
@@ -717,7 +715,7 @@ function makeCompositeInstance(runnerLines: string[]): SandboxInstance & {
 				onStderr?: (data: string) => void;
 			},
 		) => {
-			if (cmd.startsWith("node ")) {
+			if (cmd.includes("node ")) {
 				for (const line of runnerLines) {
 					opts?.onStdout?.(`${line}\n`);
 				}
@@ -771,7 +769,8 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		}
 
 		const configWriteCall = instance.files.write.mock.calls.find(
-			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
+			(call: string[]) =>
+				call[0] === "/home/user/.sandcaster/agent_config.json",
 		) as string[];
 		expect(configWriteCall).toBeDefined();
 
@@ -793,7 +792,8 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		}
 
 		const configWriteCall = instance.files.write.mock.calls.find(
-			(call: string[]) => call[0] === "/opt/sandcaster/agent_config.json",
+			(call: string[]) =>
+				call[0] === "/home/user/.sandcaster/agent_config.json",
 		) as string[];
 		expect(configWriteCall).toBeDefined();
 
@@ -815,7 +815,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		// Override the write mock so we capture the nonce from agent_config
 		instance.files.write.mockImplementation(
 			async (path: string, content: string) => {
-				if (path === "/opt/sandcaster/agent_config.json") {
+				if (path === "/home/user/.sandcaster/agent_config.json") {
 					const parsed = JSON.parse(content);
 					capturedNonce = parsed.composite_nonce;
 					// Now override the runner command to emit a composite request with the right nonce
@@ -824,7 +824,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 							cmd: string,
 							opts?: { onStdout?: (data: string) => void },
 						) => {
-							if (cmd.startsWith("node ")) {
+							if (cmd.includes("node ")) {
 								if (capturedNonce) {
 									const ipcReq = JSON.stringify({
 										type: "composite_request",
@@ -872,14 +872,14 @@ describe("runAgentInSandbox — composite orchestration", () => {
 
 		instance.files.write.mockImplementation(
 			async (path: string, content: string) => {
-				if (path === "/opt/sandcaster/agent_config.json") {
+				if (path === "/home/user/.sandcaster/agent_config.json") {
 					capturedNonce = JSON.parse(content).composite_nonce;
 					instance.commands.run.mockImplementation(
 						async (
 							cmd: string,
 							opts?: { onStdout?: (data: string) => void },
 						) => {
-							if (cmd.startsWith("node ") && capturedNonce) {
+							if (cmd.includes("node ") && capturedNonce) {
 								const ipcReq = JSON.stringify({
 									type: "composite_request",
 									id: "ipc-req-002",
@@ -925,14 +925,14 @@ describe("runAgentInSandbox — composite orchestration", () => {
 
 		instance.files.write.mockImplementation(
 			async (path: string, _content: string) => {
-				if (path === "/opt/sandcaster/agent_config.json") {
+				if (path === "/home/user/.sandcaster/agent_config.json") {
 					// Emit a composite request with a WRONG nonce
 					instance.commands.run.mockImplementation(
 						async (
 							cmd: string,
 							opts?: { onStdout?: (data: string) => void },
 						) => {
-							if (cmd.startsWith("node ")) {
+							if (cmd.includes("node ")) {
 								const ipcReq = JSON.stringify({
 									type: "composite_request",
 									id: "ipc-req-003",
@@ -1206,7 +1206,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 
 		primaryInstance.files.write.mockImplementation(
 			async (path: string, content: string) => {
-				if (path === "/opt/sandcaster/agent_config.json") {
+				if (path === "/home/user/.sandcaster/agent_config.json") {
 					capturedNonce = JSON.parse(content).composite_nonce;
 					// Override runner to emit a spawn IPC request with the captured nonce
 					primaryInstance.commands.run.mockImplementation(
@@ -1214,7 +1214,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 							cmd: string,
 							opts?: { onStdout?: (data: string) => void },
 						) => {
-							if (cmd.startsWith("node ") && capturedNonce) {
+							if (cmd.includes("node ") && capturedNonce) {
 								const ipcReq = JSON.stringify({
 									type: "composite_request",
 									id: "ipc-spawn-001",
