@@ -137,7 +137,12 @@ export async function executeQuery(
 				: 300;
 
 	// Merge branching CLI args into config
-	if (args.branches || args.branchTrigger || args.evaluator) {
+	if (
+		args.branches ||
+		args.branchTrigger ||
+		args.evaluator ||
+		args.confidenceThreshold !== undefined
+	) {
 		const branchingOverride: Record<string, unknown> = {
 			enabled: true,
 			...(args.branches !== undefined ? { count: args.branches } : {}),
@@ -344,19 +349,37 @@ export const queryCommand = defineCommand({
 
 		const branchTriggerRaw = args["branch-trigger"] as string | undefined;
 		const validTriggers = ["explicit", "confidence", "always"] as const;
-		const branchTrigger =
-			branchTriggerRaw !== undefined &&
-			validTriggers.includes(branchTriggerRaw as (typeof validTriggers)[number])
-				? (branchTriggerRaw as (typeof validTriggers)[number])
-				: undefined;
+		let branchTrigger: (typeof validTriggers)[number] | undefined;
+		if (branchTriggerRaw !== undefined) {
+			if (
+				!validTriggers.includes(
+					branchTriggerRaw as (typeof validTriggers)[number],
+				)
+			) {
+				console.error(
+					`Invalid --branch-trigger: ${branchTriggerRaw} (must be one of: ${validTriggers.join(", ")})`,
+				);
+				process.exit(1);
+			}
+			branchTrigger = branchTriggerRaw as (typeof validTriggers)[number];
+		}
 
 		const evaluatorRaw = args.evaluator as string | undefined;
 		const validEvaluators = ["llm-judge", "schema", "custom"] as const;
-		const evaluator =
-			evaluatorRaw !== undefined &&
-			validEvaluators.includes(evaluatorRaw as (typeof validEvaluators)[number])
-				? (evaluatorRaw as (typeof validEvaluators)[number])
-				: undefined;
+		let evaluator: (typeof validEvaluators)[number] | undefined;
+		if (evaluatorRaw !== undefined) {
+			if (
+				!validEvaluators.includes(
+					evaluatorRaw as (typeof validEvaluators)[number],
+				)
+			) {
+				console.error(
+					`Invalid --evaluator: ${evaluatorRaw} (must be one of: ${validEvaluators.join(", ")})`,
+				);
+				process.exit(1);
+			}
+			evaluator = evaluatorRaw as (typeof validEvaluators)[number];
+		}
 
 		let confidenceThreshold: number | undefined;
 		const ctRaw = args["confidence-threshold"] as string | undefined;
