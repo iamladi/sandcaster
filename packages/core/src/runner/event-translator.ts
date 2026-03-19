@@ -24,7 +24,52 @@ export type SandcasterEvent =
 			numTurns?: number;
 			model?: string;
 	  }
-	| { type: "error"; content: string; code?: string; hint?: string };
+	| { type: "error"; content: string; code?: string; hint?: string }
+	// Branch event types
+	| {
+			type: "branch_request";
+			alternatives: string[];
+			reason?: string;
+	  }
+	| { type: "confidence_report"; level: number; reason: string }
+	| {
+			type: "branch_start";
+			branchId: string;
+			branchIndex: number;
+			totalBranches: number;
+			prompt: string;
+	  }
+	| {
+			type: "branch_progress";
+			branchId: string;
+			branchIndex: number;
+			status: "running" | "completed" | "error";
+			numTurns?: number;
+			costUsd?: number;
+	  }
+	| {
+			type: "branch_complete";
+			branchId: string;
+			status: "success" | "error";
+			costUsd?: number;
+			numTurns?: number;
+			content?: string;
+	  }
+	| {
+			type: "branch_selected";
+			branchId: string;
+			branchIndex: number;
+			reason: string;
+			scores?: Record<string, number>;
+	  }
+	| {
+			type: "branch_summary";
+			totalBranches: number;
+			successCount: number;
+			totalCostUsd: number;
+			evaluator: string;
+			winnerId?: string;
+	  };
 
 // ---------------------------------------------------------------------------
 // createEventTranslator

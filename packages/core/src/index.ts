@@ -1,4 +1,7 @@
 export * from "./auth.js";
+export * from "./branching/branch-orchestrator.js";
+export * from "./branching/evaluator.js";
+export * from "./branching/types.js";
 export * from "./config.js";
 export * from "./errors.js";
 export * from "./files.js";

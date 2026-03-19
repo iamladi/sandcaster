@@ -29,6 +29,10 @@ export interface QueryArgs {
 	maxTurns?: number;
 	noTui: boolean;
 	template?: string;
+	branches?: number;
+	branchTrigger?: "explicit" | "confidence" | "always";
+	evaluator?: "llm-judge" | "schema" | "custom";
+	confidenceThreshold?: number;
 }
 
 export type InkInstance = ReturnType<typeof inkRender>;
@@ -132,6 +136,32 @@ export async function executeQuery(
 				? undefined
 				: 300;
 
+	// Merge branching CLI args into config
+	if (
+		args.branches ||
+		args.branchTrigger ||
+		args.evaluator ||
+		args.confidenceThreshold !== undefined
+	) {
+		const branchingOverride: Record<string, unknown> = {
+			enabled: true,
+			...(args.branches !== undefined ? { count: args.branches } : {}),
+			...(args.branchTrigger !== undefined
+				? { trigger: args.branchTrigger }
+				: {}),
+			...(args.evaluator !== undefined
+				? { evaluator: { type: args.evaluator } }
+				: {}),
+			...(args.confidenceThreshold !== undefined
+				? { confidenceThreshold: args.confidenceThreshold }
+				: {}),
+		};
+		config = {
+			...config,
+			branching: { ...(config?.branching ?? {}), ...branchingOverride },
+		} as SandcasterConfig;
+	}
+
 	const request = {
 		prompt: args.prompt,
 		...(args.model !== undefined ? { model: args.model } : {}),
@@ -147,10 +177,24 @@ export async function executeQuery(
 		...(config !== null ? { config } : {}),
 	};
 
+	// Select runner: use runBranchedAgent when branching is enabled
+	const branchingEnabled = config?.branching?.enabled === true;
+	let generator: AsyncGenerator<SandcasterEvent>;
+	if (branchingEnabled) {
+		const { runBranchedAgent } = await import("@sandcaster/core");
+		generator = runBranchedAgent({
+			request,
+			config: config ?? undefined,
+			runAgent: deps.runAgent,
+		});
+	} else {
+		generator = deps.runAgent(options);
+	}
+
 	if (args.noTui) {
 		let exitCode = 1;
 		let hasError = false;
-		for await (const event of deps.runAgent(options)) {
+		for await (const event of generator) {
 			deps.stdout.write(`${JSON.stringify(event)}\n`);
 			if (event.type === "error") {
 				hasError = true;
@@ -160,7 +204,6 @@ export async function executeQuery(
 		}
 		deps.exit(hasError ? 1 : exitCode);
 	} else {
-		const generator = deps.runAgent(options);
 		const renderFn = deps.render ?? inkRender;
 		let exitCode = 0;
 		const instance = renderFn(
@@ -238,6 +281,23 @@ export const queryCommand = defineCommand({
 			description: "Use the TUI (pass --no-tui for JSON lines to stdout)",
 			default: true,
 		},
+		branches: {
+			type: "string",
+			alias: "B",
+			description: "Number of parallel branches (1-5)",
+		},
+		"branch-trigger": {
+			type: "string",
+			description: "Branch trigger mode (explicit, confidence, always)",
+		},
+		evaluator: {
+			type: "string",
+			description: "Evaluator type (llm-judge, schema, custom)",
+		},
+		"confidence-threshold": {
+			type: "string",
+			description: "Confidence threshold for auto-branching (0-1)",
+		},
 	},
 	async run({ args }) {
 		const fileArg = args.file;
@@ -275,6 +335,66 @@ export const queryCommand = defineCommand({
 				? (providerRaw as (typeof validProviders)[number])
 				: undefined;
 
+		// Parse branch args
+		let branches: number | undefined;
+		if (args.branches !== undefined) {
+			branches = Number(args.branches);
+			if (!Number.isFinite(branches) || branches < 1 || branches > 5) {
+				console.error(
+					`Invalid --branches value: ${args.branches} (must be 1-5)`,
+				);
+				process.exit(1);
+			}
+		}
+
+		const branchTriggerRaw = args["branch-trigger"] as string | undefined;
+		const validTriggers = ["explicit", "confidence", "always"] as const;
+		let branchTrigger: (typeof validTriggers)[number] | undefined;
+		if (branchTriggerRaw !== undefined) {
+			if (
+				!validTriggers.includes(
+					branchTriggerRaw as (typeof validTriggers)[number],
+				)
+			) {
+				console.error(
+					`Invalid --branch-trigger: ${branchTriggerRaw} (must be one of: ${validTriggers.join(", ")})`,
+				);
+				process.exit(1);
+			}
+			branchTrigger = branchTriggerRaw as (typeof validTriggers)[number];
+		}
+
+		const evaluatorRaw = args.evaluator as string | undefined;
+		const validEvaluators = ["llm-judge", "schema", "custom"] as const;
+		let evaluator: (typeof validEvaluators)[number] | undefined;
+		if (evaluatorRaw !== undefined) {
+			if (
+				!validEvaluators.includes(
+					evaluatorRaw as (typeof validEvaluators)[number],
+				)
+			) {
+				console.error(
+					`Invalid --evaluator: ${evaluatorRaw} (must be one of: ${validEvaluators.join(", ")})`,
+				);
+				process.exit(1);
+			}
+			evaluator = evaluatorRaw as (typeof validEvaluators)[number];
+		}
+
+		let confidenceThreshold: number | undefined;
+		const ctRaw = args["confidence-threshold"] as string | undefined;
+		if (ctRaw !== undefined) {
+			confidenceThreshold = Number(ctRaw);
+			if (
+				!Number.isFinite(confidenceThreshold) ||
+				confidenceThreshold < 0 ||
+				confidenceThreshold > 1
+			) {
+				console.error(`Invalid --confidence-threshold: ${ctRaw} (must be 0-1)`);
+				process.exit(1);
+			}
+		}
+
 		await executeQuery(
 			{
 				prompt: args.prompt as string,
@@ -285,6 +405,10 @@ export const queryCommand = defineCommand({
 				timeout,
 				maxTurns,
 				noTui: !(args.tui as boolean),
+				branches,
+				branchTrigger,
+				evaluator,
+				confidenceThreshold,
 			},
 			prodDeps,
 		);

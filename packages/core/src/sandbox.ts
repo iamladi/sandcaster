@@ -168,6 +168,13 @@ function buildAgentConfig(
 		agentConfig.composite_poll_interval_ms = compositeFields.pollIntervalMs;
 	}
 
+	// Branching: enable branch/confidence tools inside the sandbox runner
+	const branchingEnabled =
+		config?.branching?.enabled === true || request.branching?.enabled === true;
+	if (branchingEnabled) {
+		agentConfig.branching_enabled = true;
+	}
+
 	return agentConfig;
 }
 

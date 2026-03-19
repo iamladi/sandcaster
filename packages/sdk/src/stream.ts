@@ -19,6 +19,13 @@ const KNOWN_EVENT_TYPES = new Set<SandcasterEventType>([
 	"session_created",
 	"session_expired",
 	"session_command_result",
+	"branch_request",
+	"confidence_report",
+	"branch_start",
+	"branch_progress",
+	"branch_complete",
+	"branch_selected",
+	"branch_summary",
 ]);
 
 function isKnownEventType(type: unknown): type is SandcasterEventType {

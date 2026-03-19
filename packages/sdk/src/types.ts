@@ -89,6 +89,65 @@ export interface SessionCommandResultEvent {
 	data?: unknown;
 }
 
+// ---------------------------------------------------------------------------
+// Branch event types
+// ---------------------------------------------------------------------------
+
+export interface BranchRequestEvent {
+	type: "branch_request";
+	alternatives: string[];
+	reason?: string;
+}
+
+export interface ConfidenceReportEvent {
+	type: "confidence_report";
+	level: number;
+	reason: string;
+}
+
+export interface BranchStartEvent {
+	type: "branch_start";
+	branchId: string;
+	branchIndex: number;
+	totalBranches: number;
+	prompt: string;
+}
+
+export interface BranchProgressEvent {
+	type: "branch_progress";
+	branchId: string;
+	branchIndex: number;
+	status: "running" | "completed" | "error";
+	numTurns?: number;
+	costUsd?: number;
+}
+
+export interface BranchCompleteEvent {
+	type: "branch_complete";
+	branchId: string;
+	status: "success" | "error";
+	costUsd?: number;
+	numTurns?: number;
+	content?: string;
+}
+
+export interface BranchSelectedEvent {
+	type: "branch_selected";
+	branchId: string;
+	branchIndex: number;
+	reason: string;
+	scores?: Record<string, number>;
+}
+
+export interface BranchSummaryEvent {
+	type: "branch_summary";
+	totalBranches: number;
+	successCount: number;
+	totalCostUsd: number;
+	evaluator: string;
+	winnerId?: string;
+}
+
 export type SandcasterEvent =
 	| SystemEvent
 	| AssistantEvent
@@ -102,7 +161,14 @@ export type SandcasterEvent =
 	| ErrorEvent
 	| SessionCreatedEvent
 	| SessionExpiredEvent
-	| SessionCommandResultEvent;
+	| SessionCommandResultEvent
+	| BranchRequestEvent
+	| ConfidenceReportEvent
+	| BranchStartEvent
+	| BranchProgressEvent
+	| BranchCompleteEvent
+	| BranchSelectedEvent
+	| BranchSummaryEvent;
 
 export type SandcasterEventType = SandcasterEvent["type"];
 
@@ -132,6 +198,24 @@ export interface QueryRequest {
 	provider?: "anthropic" | "vertex" | "bedrock" | "openrouter";
 	thinkingLevel?: "none" | "low" | "medium" | "high";
 	sandboxProvider?: "e2b" | "vercel" | "docker" | "cloudflare";
+	branching?: {
+		enabled?: boolean;
+		count?: number;
+		maxBranches?: number;
+		trigger?: "explicit" | "confidence" | "always";
+		confidenceThreshold?: number;
+		staggerDelayMs?: number;
+		evaluator?: {
+			type: "llm-judge" | "schema" | "custom";
+			prompt?: string;
+			model?: string;
+		};
+		branches?: Array<{
+			provider?: string;
+			model?: string;
+			sandboxProvider?: string;
+		}>;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -151,6 +235,9 @@ export interface Run {
 	filesCount: number;
 	feedback?: string;
 	feedbackUser?: string;
+	branchCount?: number;
+	branchWinnerId?: string;
+	evaluatorType?: string;
 }
 
 export interface Session {

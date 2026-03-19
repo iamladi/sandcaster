@@ -9,7 +9,7 @@ import { createCompositeTools } from "./composite-tools.js";
 import { createEventTranslator } from "./event-translator.js";
 import { IpcClient } from "./ipc-client.js";
 import { resolveModelFromConfig } from "./model-aliases.js";
-import { createSandboxTools } from "./sandbox-tools.js";
+import { createBranchTools, createSandboxTools } from "./sandbox-tools.js";
 
 export async function runAgent(
 	config: Record<string, unknown>,
@@ -24,6 +24,14 @@ export async function runAgent(
 	agent.setModel(model);
 
 	const tools = [...createSandboxTools()];
+
+	// Branch tools (when branching is enabled from orchestrator)
+	let branchShouldAbort: (() => boolean) | undefined;
+	if (config.branching_enabled === true) {
+		const branchResult = createBranchTools({ emit });
+		tools.push(...branchResult.tools);
+		branchShouldAbort = branchResult.shouldAbort;
+	}
 
 	if (
 		config.composite_enabled === true &&
@@ -78,6 +86,10 @@ export async function runAgent(
 			if (maxTurns !== undefined && turnCount >= maxTurns) {
 				agent.abort();
 			}
+		}
+		// Abort after tool execution when branch tool has been called
+		if (event.type === "tool_execution_end" && branchShouldAbort?.() === true) {
+			agent.abort();
 		}
 		for (const translated of translator.translate(event)) {
 			emit(translated);

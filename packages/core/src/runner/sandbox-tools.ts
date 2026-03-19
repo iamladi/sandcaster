@@ -113,3 +113,102 @@ export function createSandboxTools(options?: {
 
 	return [bash, file_read, file_write, read_skill];
 }
+
+// ---------------------------------------------------------------------------
+// Branch tools — created separately, used by runner when branching is enabled
+// ---------------------------------------------------------------------------
+
+export interface BranchToolsResult {
+	tools: AgentTool<any>[];
+	shouldAbort: () => boolean;
+}
+
+export function createBranchTools(options: {
+	emit: (event: Record<string, unknown>) => void;
+}): BranchToolsResult {
+	let abortRequested = false;
+
+	const branch: AgentTool<any> = {
+		name: "branch",
+		description:
+			"Fork execution into multiple parallel branches with different approaches. Each branch runs in its own isolated sandbox. The best result is selected by an evaluator.",
+		label: "Branch execution",
+		parameters: Type.Object({
+			alternatives: Type.Array(
+				Type.String({
+					description: "Alternative prompt/approach for a branch",
+				}),
+				{
+					description:
+						"Array of alternative prompts to try in parallel branches",
+					minItems: 1,
+					maxItems: 10,
+				},
+			),
+			reason: Type.Optional(
+				Type.String({ description: "Why branching is being requested" }),
+			),
+		}),
+		execute: async (_toolCallId, params) => {
+			const event: Record<string, unknown> = {
+				type: "branch_request",
+				alternatives: params.alternatives,
+			};
+			if (params.reason) {
+				event.reason = params.reason;
+			}
+			options.emit(event);
+			abortRequested = true;
+
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: "Branching requested. Execution will fork into parallel branches.",
+					},
+				],
+				details: {},
+			};
+		},
+	};
+
+	const reportConfidence: AgentTool<any> = {
+		name: "report_confidence",
+		description:
+			"Report your confidence level in the current approach. If confidence is below the configured threshold, the system may automatically branch to explore alternatives.",
+		label: "Report confidence",
+		parameters: Type.Object({
+			level: Type.Number({
+				description:
+					"Confidence level from 0.0 (no confidence) to 1.0 (fully confident)",
+				minimum: 0,
+				maximum: 1,
+			}),
+			reason: Type.String({
+				description: "Explanation of why you have this confidence level",
+			}),
+		}),
+		execute: async (_toolCallId, params) => {
+			options.emit({
+				type: "confidence_report",
+				level: params.level,
+				reason: params.reason,
+			});
+
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: `Confidence reported: ${params.level} — ${params.reason}`,
+					},
+				],
+				details: {},
+			};
+		},
+	};
+
+	return {
+		tools: [branch, reportConfidence],
+		shouldAbort: () => abortRequested,
+	};
+}

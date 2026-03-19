@@ -56,6 +56,9 @@ export function registerQueryRoutes(
 				let numTurns: number | undefined;
 				let durationSecs: number | undefined;
 				let model: string | undefined;
+				let branchCount: number | undefined;
+				let branchWinnerId: string | undefined;
+				let evaluatorType: string | undefined;
 
 				try {
 					for await (const event of runAgent({
@@ -71,6 +74,13 @@ export function registerQueryRoutes(
 							model = event.model;
 						}
 
+						// Extract branch metadata from branch_summary events
+						if (event.type === "branch_summary") {
+							branchCount = event.totalBranches;
+							branchWinnerId = event.winnerId;
+							evaluatorType = event.evaluator;
+						}
+
 						await stream.writeSSE({
 							event: event.type,
 							data: JSON.stringify(event),
@@ -82,6 +92,9 @@ export function registerQueryRoutes(
 						numTurns,
 						durationSecs,
 						model,
+						branchCount,
+						branchWinnerId,
+						evaluatorType,
 					});
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);

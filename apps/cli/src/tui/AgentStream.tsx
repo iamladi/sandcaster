@@ -117,6 +117,16 @@ function EventLine({ event }: { event: SandcasterEvent }): React.ReactElement {
 		case "session_command_result":
 			return <Text dimColor>{event.content}</Text>;
 
+		// Branch events handled by BranchProgress/BranchSummary, not AgentStream
+		case "branch_request":
+		case "confidence_report":
+		case "branch_start":
+		case "branch_progress":
+		case "branch_complete":
+		case "branch_selected":
+		case "branch_summary":
+			return <></>;
+
 		default: {
 			const _exhaustive: never = event;
 			return <Text>{String(_exhaustive)}</Text>;

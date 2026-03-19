@@ -34,10 +34,15 @@ vi.mock("../../runner/event-translator.js", () => ({
 	}),
 }));
 
+const branchState = { shouldAbort: false };
 vi.mock("../../runner/sandbox-tools.js", () => ({
 	createSandboxTools: vi
 		.fn()
 		.mockReturnValue([{ name: "bash" }, { name: "file_read" }]),
+	createBranchTools: vi.fn().mockImplementation(() => ({
+		tools: [{ name: "branch" }, { name: "report_confidence" }],
+		shouldAbort: () => branchState.shouldAbort,
+	})),
 }));
 
 const mockCreateCompositeTools = vi
@@ -221,5 +226,90 @@ describe("runAgent — composite tools capability gate", () => {
 		);
 
 		expect(mockCreateCompositeTools).not.toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Branch tools integration
+// ---------------------------------------------------------------------------
+
+describe("runAgent — branch tools", () => {
+	it("includes branch tools when branching_enabled is true", async () => {
+		mockSetTools.mockClear();
+
+		await runAgent(
+			{ prompt: "hello", branching_enabled: true },
+			process.env,
+			vi.fn(),
+		);
+
+		const toolNames = (mockSetTools.mock.calls[0]?.[0] as any[]).map(
+			(t: any) => t.name,
+		);
+		expect(toolNames).toContain("branch");
+		expect(toolNames).toContain("report_confidence");
+	});
+
+	it("does not include branch tools when branching_enabled is absent", async () => {
+		mockSetTools.mockClear();
+
+		await runAgent({ prompt: "hello" }, process.env, vi.fn());
+
+		const toolNames = (mockSetTools.mock.calls[0]?.[0] as any[]).map(
+			(t: any) => t.name,
+		);
+		expect(toolNames).not.toContain("branch");
+		expect(toolNames).not.toContain("report_confidence");
+	});
+
+	it("aborts agent after tool_execution_end when branch abort flag is set", async () => {
+		mockAbort.mockClear();
+		branchState.shouldAbort = true;
+
+		mockPrompt.mockImplementationOnce(async () => {
+			if (_subscribeFn) {
+				_subscribeFn({
+					type: "tool_execution_end",
+					toolName: "branch",
+					result: {},
+					isError: false,
+				});
+			}
+		});
+
+		await runAgent(
+			{ prompt: "hello", branching_enabled: true },
+			process.env,
+			vi.fn(),
+		);
+
+		expect(mockAbort).toHaveBeenCalled();
+
+		// Clean up
+		branchState.shouldAbort = false;
+	});
+
+	it("does not abort when branch abort flag is false", async () => {
+		mockAbort.mockClear();
+		branchState.shouldAbort = false;
+
+		mockPrompt.mockImplementationOnce(async () => {
+			if (_subscribeFn) {
+				_subscribeFn({
+					type: "tool_execution_end",
+					toolName: "bash",
+					result: {},
+					isError: false,
+				});
+			}
+		});
+
+		await runAgent(
+			{ prompt: "hello", branching_enabled: true },
+			process.env,
+			vi.fn(),
+		);
+
+		expect(mockAbort).not.toHaveBeenCalled();
 	});
 });

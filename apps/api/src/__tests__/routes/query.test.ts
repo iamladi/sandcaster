@@ -157,4 +157,89 @@ describe("POST /query", () => {
 
 		expect(res.status).toBe(401);
 	});
+
+	test("stores branch metadata in run when branch_summary event is emitted", async () => {
+		const runStore = createRunStore({
+			path: `/tmp/sandcaster-test-${crypto.randomUUID()}.jsonl`,
+		});
+
+		async function* branchRunAgent(
+			_options: RunOptions,
+		): AsyncGenerator<SandcasterEvent> {
+			yield {
+				type: "branch_start",
+				branchId: "branch-0-abc",
+				branchIndex: 0,
+				totalBranches: 2,
+				prompt: "approach A",
+			};
+			yield {
+				type: "branch_start",
+				branchId: "branch-1-def",
+				branchIndex: 1,
+				totalBranches: 2,
+				prompt: "approach B",
+			};
+			yield {
+				type: "branch_complete",
+				branchId: "branch-0-abc",
+				status: "success",
+				costUsd: 0.03,
+				numTurns: 2,
+			};
+			yield {
+				type: "branch_complete",
+				branchId: "branch-1-def",
+				status: "success",
+				costUsd: 0.05,
+				numTurns: 3,
+			};
+			yield {
+				type: "branch_selected",
+				branchId: "branch-1-def",
+				branchIndex: 1,
+				reason: "better output",
+			};
+			yield {
+				type: "result",
+				content: "final answer",
+				costUsd: 0.08,
+				numTurns: 5,
+			};
+			yield {
+				type: "branch_summary",
+				totalBranches: 2,
+				successCount: 2,
+				totalCostUsd: 0.08,
+				evaluator: "llm-judge",
+				winnerId: "branch-1-def",
+			};
+		}
+
+		const app = createApp({ runAgent: branchRunAgent, runStore });
+		const res = await postQuery(app, { prompt: "branching task" });
+		await res.text();
+
+		const runs = runStore.list();
+		expect(runs).toHaveLength(1);
+		expect(runs[0].status).toBe("completed");
+		expect(runs[0].branchCount).toBe(2);
+		expect(runs[0].branchWinnerId).toBe("branch-1-def");
+		expect(runs[0].evaluatorType).toBe("llm-judge");
+	});
+
+	test("run without branch_summary has no branch metadata", async () => {
+		const runStore = createRunStore({
+			path: `/tmp/sandcaster-test-${crypto.randomUUID()}.jsonl`,
+		});
+
+		const app = createApp({ runAgent: fakeRunAgent, runStore });
+		const res = await postQuery(app, { prompt: "simple task" });
+		await res.text();
+
+		const runs = runStore.list();
+		expect(runs[0].branchCount).toBeUndefined();
+		expect(runs[0].branchWinnerId).toBeUndefined();
+		expect(runs[0].evaluatorType).toBeUndefined();
+	});
 });

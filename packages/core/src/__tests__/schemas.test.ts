@@ -381,6 +381,54 @@ describe("SandcasterConfigSchema", () => {
 			expect(result.data.composite).toBeUndefined();
 		}
 	});
+
+	// --- branching field ---
+
+	it("accepts a valid branching config", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			branching: {
+				enabled: true,
+				count: 3,
+				trigger: "explicit",
+				evaluator: { type: "llm-judge" },
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts an empty branching object", () => {
+		const result = SandcasterConfigSchema.safeParse({ branching: {} });
+		expect(result.success).toBe(true);
+	});
+
+	it("omitting branching field is valid", () => {
+		const result = SandcasterConfigSchema.safeParse({});
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.branching).toBeUndefined();
+		}
+	});
+
+	it("rejects branching with count above 5", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			branching: { count: 6 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects branching with maxBranches above 10", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			branching: { maxBranches: 11 },
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects branching with invalid trigger", () => {
+		const result = SandcasterConfigSchema.safeParse({
+			branching: { trigger: "invalid" },
+		});
+		expect(result.success).toBe(false);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -452,6 +500,54 @@ describe("QueryRequestSchema — composite field", () => {
 		const result = QueryRequestSchema.safeParse({
 			prompt: "test",
 			composite: { allowedProviders: ["unknown-provider"] },
+		});
+		expect(result.success).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// QueryRequestSchema — branching field
+// ---------------------------------------------------------------------------
+
+describe("QueryRequestSchema — branching field", () => {
+	it("accepts a request with branching config", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			branching: {
+				enabled: true,
+				count: 3,
+				trigger: "always",
+				evaluator: { type: "llm-judge" },
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts branching with branches array", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			branching: {
+				branches: [
+					{ model: "haiku", sandboxProvider: "docker" },
+					{ model: "sonnet" },
+				],
+			},
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("omitting branching is valid", () => {
+		const result = QueryRequestSchema.safeParse({ prompt: "test" });
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.branching).toBeUndefined();
+		}
+	});
+
+	it("rejects branching with count of 0", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			branching: { count: 0 },
 		});
 		expect(result.success).toBe(false);
 	});
@@ -644,6 +740,172 @@ describe("SandcasterEventSchema", () => {
 		});
 		expect(result.success).toBe(false);
 	});
+
+	// --- Branch event types ---
+
+	it("parses a branch_request event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_request",
+			alternatives: ["Try approach A", "Try approach B"],
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_request event with optional reason", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_request",
+			alternatives: ["A", "B"],
+			reason: "Multiple viable approaches",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "branch_request") {
+			expect(result.data.reason).toBe("Multiple viable approaches");
+		}
+	});
+
+	it("rejects branch_request with empty alternatives array", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_request",
+			alternatives: [],
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects branch_request with more than 10 alternatives", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_request",
+			alternatives: Array.from({ length: 11 }, (_, i) => `alt-${i}`),
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("parses a confidence_report event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "confidence_report",
+			level: 0.3,
+			reason: "Uncertain about approach",
+		});
+		expect(result.success).toBe(true);
+		if (result.success && result.data.type === "confidence_report") {
+			expect(result.data.level).toBe(0.3);
+		}
+	});
+
+	it("rejects confidence_report with level above 1", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "confidence_report",
+			level: 1.1,
+			reason: "test",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("rejects confidence_report with level below 0", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "confidence_report",
+			level: -0.1,
+			reason: "test",
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it("parses a branch_start event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_start",
+			branchId: "branch-001",
+			branchIndex: 0,
+			totalBranches: 3,
+			prompt: "Try approach A",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_progress event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_progress",
+			branchId: "branch-001",
+			branchIndex: 0,
+			status: "running",
+			numTurns: 2,
+			costUsd: 0.01,
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_progress event with minimal fields", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_progress",
+			branchId: "branch-001",
+			branchIndex: 0,
+			status: "running",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_complete event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_complete",
+			branchId: "branch-001",
+			status: "success",
+			costUsd: 0.05,
+			numTurns: 4,
+			content: "Final result text",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_complete error event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_complete",
+			branchId: "branch-001",
+			status: "error",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_selected event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_selected",
+			branchId: "branch-002",
+			branchIndex: 1,
+			reason: "Highest quality response",
+			scores: { "branch-001": 0.7, "branch-002": 0.92 },
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_selected event without scores", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_selected",
+			branchId: "branch-002",
+			branchIndex: 1,
+			reason: "Best result",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_summary event", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_summary",
+			totalBranches: 3,
+			successCount: 2,
+			totalCostUsd: 0.19,
+			evaluator: "llm-judge",
+			winnerId: "branch-002",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("parses a branch_summary event without winnerId", () => {
+		const result = SandcasterEventSchema.safeParse({
+			type: "branch_summary",
+			totalBranches: 3,
+			successCount: 0,
+			totalCostUsd: 0.05,
+			evaluator: "llm-judge",
+		});
+		expect(result.success).toBe(true);
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -787,5 +1049,24 @@ describe("RunSchema", () => {
 		const { id: _, ...withoutId } = validRun;
 		const result = RunSchema.safeParse(withoutId);
 		expect(result.success).toBe(false);
+	});
+
+	it("accepts a run with branch metadata", () => {
+		const result = RunSchema.safeParse({
+			...validRun,
+			status: "completed",
+			branchCount: 3,
+			branchWinnerId: "branch-002",
+			evaluatorType: "llm-judge",
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it("accepts a run without branch metadata (backwards compatible)", () => {
+		const result = RunSchema.safeParse(validRun);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data.branchCount).toBeUndefined();
+		}
 	});
 });
