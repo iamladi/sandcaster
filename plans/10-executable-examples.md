@@ -2,7 +2,7 @@
 title: "Executable examples directory"
 type: Feature
 issue: null
-research: ["research/research-executable-examples.md"]
+research: ["research/research-executable-examples.md", "research/research-real-world-examples.md"]
 status: Ready for Implementation
 reviewed: true
 reviewers: ["codex", "gemini"]
@@ -25,7 +25,7 @@ Sandcaster has no runnable examples. Users evaluating or integrating the project
 
 ### Goals & Objectives
 
-1. Create 9 example directories covering real use cases and all sandbox providers
+1. Create 14 example directories: 6 feature demos, 3 provider examples, and 5 real-world problem-solving examples
 2. Each example is fully self-contained: `sandcaster.json` + `README.md`, copyable as a standalone directory
 3. Examples work by running `sandcaster "prompt"` from the example directory — no TypeScript compilation, no package.json, no imports
 4. Progressive complexity from "hello world" to multi-agent security audits and speculative branching
@@ -74,8 +74,8 @@ Sandcaster has no runnable examples. Users evaluating or integrating the project
    - Details: New entry in `ALIAS_MAP` at `packages/core/src/runner/model-aliases.ts:7`
    - Priority: Must Have (prerequisite for all examples)
 
-2. **FR-2**: Create `examples/` root directory with 9 example subdirectories
-   - Details: Each contains `sandcaster.json` + `README.md`
+2. **FR-2**: Create `examples/` root directory with 14 example subdirectories
+   - Details: Each contains `sandcaster.json` + `README.md`. 6 feature demos (01-06), 3 provider examples (07-09), 5 real-world examples (10-14)
    - Priority: Must Have
 
 3. **FR-3**: Create root `examples/README.md` as curriculum index
@@ -211,6 +211,24 @@ examples/
   09-provider-docker/
     sandcaster.json
     README.md
+  10-fix-ci-failure/
+    sandcaster.json
+    README.md
+    sample-logs/
+  11-generate-tests/
+    sandcaster.json
+    README.md
+    sample-code/
+  12-dependency-audit/
+    sandcaster.json
+    README.md
+  13-generate-api-docs/
+    sandcaster.json
+    README.md
+    sample-code/
+  14-onboard-to-codebase/
+    sandcaster.json
+    README.md
 ```
 
 **README template (per example):**
@@ -325,7 +343,18 @@ None.
 <!-- Addressed: [Gemini] Unclear provider prerequisites for Cloudflare -->
 - [ ] `09-provider-docker/` — Same as 01-hello-sandbox but with `"sandboxProvider": "docker"`. README documents Docker daemon requirements (no API key needed).
 
-### Phase 5: Validation & CI Guard
+### Phase 5: Real-World Problem-Solving Examples
+**Complexity**: 3 | **Priority**: High
+
+These examples demonstrate what real problems developer teams can solve with Sandcaster. Each targets a proven pain point with documented enterprise demand.
+
+- [ ] `10-fix-ci-failure/` — Agent reads CI log output, identifies root cause, proposes fix. `systemPrompt`: CI debugger that reads logs, traces to source, and generates a patch. Include `sample-logs/` with a GitHub Actions failure log (build error + test failure). User runs `sandcaster "Fix the CI failure described in sample-logs/build-output.txt"`.
+- [ ] `11-generate-tests/` — Agent generates a test suite for an untested module. `systemPrompt`: test writer that reads code and produces tests. Include `sample-code/` with an untested utility module. Uses `branching` to try multiple testing strategies (unit vs integration vs property-based) and pick the best. User runs `sandcaster "Write tests for sample-code/utils.ts"`.
+- [ ] `12-dependency-audit/` — Agent runs `npm audit` / `pip audit` in sandbox, cross-references findings, produces prioritized CVE report. `systemPrompt`: dependency security auditor. `outputFormat` with JSON schema for vulnerabilities (severity, package, CVE, fix version). Include `sample-code/` with a `package.json` containing known vulnerable deps. User runs `sandcaster "Audit the dependencies in sample-code/"`.
+- [ ] `13-generate-api-docs/` — Agent reads source code and generates OpenAPI spec. `systemPrompt`: API documentation specialist. Include `sample-code/` with a small Hono/Express API. `outputFormat` for structured endpoint documentation. User runs `sandcaster "Generate API documentation for sample-code/"`.
+- [ ] `14-onboard-to-codebase/` — Agent reads a codebase and produces an architecture overview document. `systemPrompt`: codebase analyst that traces entry points, dependencies, and key patterns. `outputFormat` for architecture report (modules, data flow, tech stack, patterns). User runs `sandcaster "Explain the architecture of this codebase"`.
+
+### Phase 6: Validation & CI Guard
 **Complexity**: 2 | **Priority**: High
 
 - [ ] Add automated test in `packages/core/src/__tests__/examples-schema.test.ts` that globs `../../examples/*/sandcaster.json` and asserts each parses against `SandcasterConfigSchema` without errors
@@ -357,6 +386,11 @@ None.
 - `examples/07-provider-vercel/sandcaster.json` + `README.md`
 - `examples/08-provider-cloudflare/sandcaster.json` + `README.md`
 - `examples/09-provider-docker/sandcaster.json` + `README.md`
+- `examples/10-fix-ci-failure/sandcaster.json` + `README.md` + `sample-logs/` (GitHub Actions failure log)
+- `examples/11-generate-tests/sandcaster.json` + `README.md` + `sample-code/` (untested utility module)
+- `examples/12-dependency-audit/sandcaster.json` + `README.md` + `sample-code/` (package.json with vulnerable deps)
+- `examples/13-generate-api-docs/sandcaster.json` + `README.md` + `sample-code/` (small Hono API)
+- `examples/14-onboard-to-codebase/sandcaster.json` + `README.md`
 
 ### Test Files
 - `packages/core/src/__tests__/runner/model-aliases.test.ts` — add `gpt5mini` test case
@@ -375,7 +409,7 @@ None.
 
 1. **Config validation**:
    - Steps: Write a script that loads each `sandcaster.json` through `SandcasterConfigSchema.safeParse()`
-   - Expected: All 9 configs parse without errors
+   - Expected: All 14 configs parse without errors
 
 2. **Portability test**:
    - Steps: Copy `examples/01-hello-sandbox/` to `/tmp/`, set env vars, run `sandcaster "Hello"`
