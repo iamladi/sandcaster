@@ -119,11 +119,11 @@ Sandcaster has no runnable examples. Users evaluating or integrating the project
 ### In Scope
 
 - `gpt5mini` model alias addition (code + test)
-- 9 example directories with `sandcaster.json` + `README.md`
+- 14 example directories with `sandcaster.json` + `README.md` (6 feature + 3 provider + 5 real-world)
 - Root `examples/README.md` index (includes CLI install path via `bun link`, troubleshooting section)
 - Root `examples/.env.example`
 - `.gitignore` for `examples/` (ignore `.env` files)
-- Sample data files for code-analysis examples (02, 04, 05) so they produce interesting output when copied standalone
+- Sample data files for code-analysis and real-world examples (02, 04, 05, 10, 11, 12, 13) so they produce interesting output when copied standalone
 - Automated schema validation test that globs `examples/*/sandcaster.json` and asserts they parse against `SandcasterConfigSchema`
 <!-- Addressed: [Consensus] Installation paradox — document bun link path -->
 <!-- Addressed: [Gemini] Missing target data for code-analysis examples -->
@@ -470,14 +470,15 @@ bunx turbo test
 ## Acceptance Criteria
 
 - [ ] `gpt5mini` alias resolves to OpenAI gpt-5.4-mini
-- [ ] 9 example directories exist with valid `sandcaster.json` + `README.md`
-- [ ] Root `examples/README.md` lists all examples with descriptions
+- [ ] 14 example directories exist with valid `sandcaster.json` + `README.md`
+- [ ] Root `examples/README.md` lists all 14 examples with descriptions and env var table
 - [ ] Root `examples/.env.example` documents all required env vars
-- [ ] All `sandcaster.json` files validate against `SandcasterConfigSchema`
-- [ ] All READMEs follow consistent 4-section structure
+- [ ] All `sandcaster.json` files validate against `SandcasterConfigSchema` (automated test in CI)
+- [ ] All READMEs follow consistent template (Prerequisites / Setup / Run / What Happens / Configuration / Troubleshooting)
+- [ ] Examples with sample data (02, 04, 05, 10, 11, 12, 13) include working sample files
 - [ ] All existing tests pass (`bunx turbo test`)
 - [ ] No build regressions (`bunx turbo build`)
-- [ ] Any single example directory is copyable and runnable outside the monorepo
+- [ ] Any single example directory is copyable and runnable outside the monorepo (requires CLI linked)
 
 ## Dependencies
 
@@ -543,7 +544,7 @@ None.
 
 ### Acknowledged but Deferred
 
-- [Codex, High] Runtime validation — running all 9 examples end-to-end → Requires real API keys + costs money. Deferred to manual pre-merge validation. Not suitable for CI.
+- [Codex, High] Runtime validation — running all 14 examples end-to-end → Requires real API keys + costs money. Deferred to manual pre-merge validation. Not suitable for CI.
 - [Codex, Medium] Validation sequencing — verify assumptions before writing all examples → Mitigated by prerequisite gate for advanced features. Config-only examples are trivially reworkable if assumptions fail.
 
 ### Dismissed
