@@ -20,6 +20,10 @@ export interface IRunStore {
 			numTurns?: number;
 			durationSecs?: number;
 			model?: string;
+			branchCount?: number;
+			branchWinnerId?: string;
+			branchCosts?: Record<string, number>;
+			evaluatorType?: string;
 		},
 	): void;
 	fail(id: string, error: string, durationSecs?: number): void;
@@ -101,6 +105,10 @@ export function createRunStore(opts?: {
 			numTurns?: number;
 			durationSecs?: number;
 			model?: string;
+			branchCount?: number;
+			branchWinnerId?: string;
+			branchCosts?: Record<string, number>;
+			evaluatorType?: string;
 		},
 	): void {
 		const run = index.get(id);
@@ -113,6 +121,12 @@ export function createRunStore(opts?: {
 		if (opts?.numTurns !== undefined) run.numTurns = opts.numTurns;
 		if (opts?.durationSecs !== undefined) run.durationSecs = opts.durationSecs;
 		if (opts?.model !== undefined) run.model = opts.model;
+		if (opts?.branchCount !== undefined) run.branchCount = opts.branchCount;
+		if (opts?.branchWinnerId !== undefined)
+			run.branchWinnerId = opts.branchWinnerId;
+		if (opts?.branchCosts !== undefined) run.branchCosts = opts.branchCosts;
+		if (opts?.evaluatorType !== undefined)
+			run.evaluatorType = opts.evaluatorType;
 		appendToFile(run);
 	}
 
