@@ -286,6 +286,7 @@ describe("evaluator integration", () => {
 			runAgent,
 			config: { branching: { staggerDelayMs: 0 } },
 			evaluator: {
+				name: "test",
 				evaluate: async (prompt, results) => {
 					branchIds.push(...results.map((r) => r.branchId));
 					const winner = results[1]; // pick second branch
@@ -339,6 +340,7 @@ describe("evaluator failure fallback", () => {
 		};
 
 		const failingEvaluator: Evaluator = {
+			name: "test-failing",
 			evaluate: async () => {
 				throw new Error("evaluator exploded");
 			},
@@ -1093,6 +1095,7 @@ describe("evaluator wiring from config", () => {
 		// Provide a fake evaluator via options.evaluator to avoid LLM calls
 		// This also tests that options.evaluator takes precedence over config evaluator
 		const fakeEvaluator: Evaluator = {
+			name: "test-fake",
 			evaluate: async (_prompt, results) => ({
 				winnerId: results[0].branchId,
 				winnerIndex: results[0].branchIndex,

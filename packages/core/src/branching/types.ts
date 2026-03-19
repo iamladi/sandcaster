@@ -75,6 +75,7 @@ export interface BranchOverride {
 // ---------------------------------------------------------------------------
 
 export interface Evaluator {
+	readonly name: string;
 	evaluate(
 		originalPrompt: string,
 		results: BranchResult[],

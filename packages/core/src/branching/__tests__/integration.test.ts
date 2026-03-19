@@ -55,6 +55,7 @@ describe("explicit branching: full lifecycle", () => {
 	it("initial run → branch_request → parallel branches → evaluation → winner", async () => {
 		// Deterministic evaluator that always picks the second branch
 		const evaluator: Evaluator = {
+			name: "test",
 			evaluate: async (_prompt, results) => {
 				const winner = results[1] ?? results[0];
 				return {
@@ -143,6 +144,7 @@ describe("explicit branching: full lifecycle", () => {
 
 	it("branch_selected is followed directly by branch_summary (no re-yielded events)", async () => {
 		const evaluator: Evaluator = {
+			name: "test",
 			evaluate: async (_prompt, results) => ({
 				winnerId: results[0].branchId,
 				winnerIndex: results[0].branchIndex,
@@ -179,11 +181,13 @@ describe("explicit branching: full lifecycle", () => {
 
 		const types = events.map((e) => e.type);
 		const selectedIdx = types.indexOf("branch_selected");
+		const resultIdx = types.lastIndexOf("result");
 		const summaryIdx = types.indexOf("branch_summary");
 
-		// branch_summary should follow branch_selected with no internal events in between
+		// Order: branch_selected → result → branch_summary
 		expect(selectedIdx).toBeGreaterThanOrEqual(0);
-		expect(summaryIdx).toBe(selectedIdx + 1);
+		expect(resultIdx).toBe(selectedIdx + 1);
+		expect(summaryIdx).toBe(resultIdx + 1);
 	});
 });
 
@@ -551,6 +555,7 @@ describe("event stream integrity", () => {
 
 	it("branch_summary contains correct winnerId matching branch_selected branchId", async () => {
 		const evaluator: Evaluator = {
+			name: "test",
 			evaluate: async (_prompt, results) => ({
 				winnerId: results[0].branchId,
 				winnerIndex: results[0].branchIndex,

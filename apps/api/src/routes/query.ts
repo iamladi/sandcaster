@@ -58,7 +58,6 @@ export function registerQueryRoutes(
 				let model: string | undefined;
 				let branchCount: number | undefined;
 				let branchWinnerId: string | undefined;
-				let branchCosts: Record<string, number> | undefined;
 				let evaluatorType: string | undefined;
 
 				try {
@@ -95,7 +94,6 @@ export function registerQueryRoutes(
 						model,
 						branchCount,
 						branchWinnerId,
-						branchCosts,
 						evaluatorType,
 					});
 				} catch (err) {

@@ -22,7 +22,6 @@ export interface IRunStore {
 			model?: string;
 			branchCount?: number;
 			branchWinnerId?: string;
-			branchCosts?: Record<string, number>;
 			evaluatorType?: string;
 		},
 	): void;
@@ -107,7 +106,6 @@ export function createRunStore(opts?: {
 			model?: string;
 			branchCount?: number;
 			branchWinnerId?: string;
-			branchCosts?: Record<string, number>;
 			evaluatorType?: string;
 		},
 	): void {
@@ -124,7 +122,6 @@ export function createRunStore(opts?: {
 		if (opts?.branchCount !== undefined) run.branchCount = opts.branchCount;
 		if (opts?.branchWinnerId !== undefined)
 			run.branchWinnerId = opts.branchWinnerId;
-		if (opts?.branchCosts !== undefined) run.branchCosts = opts.branchCosts;
 		if (opts?.evaluatorType !== undefined)
 			run.evaluatorType = opts.evaluatorType;
 		appendToFile(run);

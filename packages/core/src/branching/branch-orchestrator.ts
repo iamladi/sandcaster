@@ -126,11 +126,19 @@ async function runSingleBranch(
 	}
 
 	// Strip branching from request too (recursive guard)
-	const { branching: _strip, ...cleanRequest } = parentRequest;
+	const {
+		branching: _strip,
+		timeout: _parentTimeout,
+		...cleanRequest
+	} = parentRequest;
 	const branchRequest: QueryRequest = {
 		...cleanRequest,
 		...requestOverrides,
 		prompt: branchPrompt,
+		// Use remaining timeout (if computed) so branches don't exceed the parent budget
+		...(remainingTimeout !== undefined
+			? { timeout: Math.max(1, Math.floor(remainingTimeout)) }
+			: {}),
 	};
 
 	const events: SandcasterEvent[] = [];
@@ -138,6 +146,7 @@ async function runSingleBranch(
 	let costUsd: number | undefined;
 	let numTurns: number | undefined;
 	let turnCount = 0;
+	let sawError = false;
 
 	try {
 		const gen = runAgent({
@@ -152,8 +161,8 @@ async function runSingleBranch(
 			}
 			events.push(event);
 
-			// Track turns and cost for progress
-			if (event.type === "tool_result" || event.type === "assistant") {
+			// Track turns at tool_result boundaries (not per-token assistant deltas)
+			if (event.type === "tool_result") {
 				turnCount++;
 				onProgress({
 					branchId,
@@ -164,6 +173,11 @@ async function runSingleBranch(
 				});
 			}
 
+			if (event.type === "error") {
+				sawError = true;
+				finalContent = event.content;
+			}
+
 			if (event.type === "result") {
 				finalContent = event.content;
 				costUsd = event.costUsd;
@@ -171,7 +185,7 @@ async function runSingleBranch(
 			}
 		}
 
-		// Fix P1: aborted branches must not return "success"
+		// Aborted or error-emitting branches must not return "success"
 		if (signal.aborted) {
 			return {
 				branchId,
@@ -191,7 +205,7 @@ async function runSingleBranch(
 			finalContent,
 			costUsd,
 			numTurns,
-			status: "success",
+			status: sawError ? "error" : "success",
 		};
 	} catch (err) {
 		return {
@@ -278,7 +292,7 @@ export async function* runBranchedAgent(
 		if (event.type === "confidence_report") {
 			yield event;
 
-			// Confidence trigger: only fire once (one-shot)
+			// Confidence trigger: only fire once (one-shot) — break immediately to start branching
 			if (
 				!confidenceTriggered &&
 				config?.branching?.trigger === "confidence" &&
@@ -291,13 +305,14 @@ export async function* runBranchedAgent(
 					(_, i) =>
 						`Try a different approach: ${request.prompt}. Previous approach had low confidence because: ${event.reason}. Attempt #${i + 1}`,
 				);
+				break;
 			}
 			continue;
 		}
 
-		// Capture context events for potential mid-run branching
+		// Capture context events for potential mid-run branching (skip streaming deltas)
 		if (
-			event.type === "assistant" ||
+			(event.type === "assistant" && event.subtype === "complete") ||
 			event.type === "tool_use" ||
 			event.type === "tool_result"
 		) {
@@ -307,14 +322,9 @@ export async function* runBranchedAgent(
 		yield event;
 	}
 
-	// Confidence trigger fired: drain the rest of the initial run then branch
+	// Confidence trigger fired: abort the initial run and start branching
 	if (confidenceTriggerAlternatives) {
-		for await (const _event of initialGen) {
-			if (parentSignal?.aborted) {
-				await initialGen.return(undefined);
-				break;
-			}
-		}
+		await initialGen.return(undefined);
 
 		return yield* runBranchingPath(
 			confidenceTriggerAlternatives,
@@ -401,6 +411,14 @@ async function* runBranchingPath(
 	// Shared progress queue — branches push progress here, orchestrator yields them
 	const progressQueue: SandcasterEvent[] = [];
 
+	// Push-based notification: branches signal when new progress is available
+	let progressNotify: (() => void) | undefined;
+	function waitForProgress(): Promise<void> {
+		return new Promise<void>((resolve) => {
+			progressNotify = resolve;
+		});
+	}
+
 	// Emit branch_start events and start branches with stagger
 	const branchPromises: Promise<BranchResult>[] = [];
 
@@ -441,17 +459,19 @@ async function* runBranchingPath(
 					type: "branch_progress",
 					...report,
 				});
+				progressNotify?.();
 			},
 		);
 
 		branchPromises.push(branchPromise);
 	}
 
-	// Fix P0: Yield progress events while waiting for branches to complete
+	// Yield progress events while waiting for branches to complete
 	const allDone = Promise.allSettled(branchPromises);
 	let resolved = false;
 	const markResolved = allDone.then(() => {
 		resolved = true;
+		progressNotify?.();
 	});
 
 	while (!resolved) {
@@ -460,8 +480,10 @@ async function* runBranchingPath(
 			yield progressQueue.shift()!;
 		}
 
-		// Wait for either completion or a tick (500ms)
-		await Promise.race([markResolved, new Promise((r) => setTimeout(r, 500))]);
+		// Wait for either completion or new progress (no polling)
+		if (!resolved) {
+			await Promise.race([markResolved, waitForProgress()]);
+		}
 	}
 
 	// Flush remaining progress events
@@ -555,7 +577,7 @@ async function* runBranchingPath(
 			}
 			selectionReason = evalResult.reasoning;
 			scores = evalResult.scores;
-			evaluatorName = "evaluator";
+			evaluatorName = evaluator.name;
 		} catch (err) {
 			yield {
 				type: "warning",
@@ -573,9 +595,13 @@ async function* runBranchingPath(
 		scores,
 	};
 
-	// Fix P0: Do NOT re-yield winning branch events outside the envelope.
-	// The finalContent is already in branch_complete.content.
-	// Clients access full branch events via --no-tui JSON mode or /runs history.
+	// Emit terminal result event so consumers (TUI, CLI, API) recognize completion
+	yield {
+		type: "result",
+		content: winnerResult.finalContent,
+		costUsd: totalCostUsd,
+		numTurns: winnerResult.numTurns,
+	};
 
 	// Emit branch_summary
 	yield {

@@ -362,7 +362,6 @@ export const RunSchema = z.object({
 	// Branch metadata (additive — present only for branched runs)
 	branchCount: z.number().optional(),
 	branchWinnerId: z.string().optional(),
-	branchCosts: z.record(z.string(), z.number()).optional(),
 	evaluatorType: z.string().optional(),
 });
 

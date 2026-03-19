@@ -1057,7 +1057,6 @@ describe("RunSchema", () => {
 			status: "completed",
 			branchCount: 3,
 			branchWinnerId: "branch-002",
-			branchCosts: { "branch-001": 0.02, "branch-002": 0.05 },
 			evaluatorType: "llm-judge",
 		});
 		expect(result.success).toBe(true);

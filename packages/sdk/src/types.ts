@@ -237,7 +237,6 @@ export interface Run {
 	feedbackUser?: string;
 	branchCount?: number;
 	branchWinnerId?: string;
-	branchCosts?: Record<string, number>;
 	evaluatorType?: string;
 }
 

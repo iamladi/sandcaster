@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 import { Agent } from "@mariozechner/pi-agent-core";
+import { autoDetectModel, resolveModel } from "../runner/model-aliases.js";
 import type { BranchResult, EvaluationResult, Evaluator } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -95,48 +96,51 @@ function buildBranchSummary(results: BranchResult[]): string {
 		.join("\n\n---\n\n");
 }
 
+/**
+ * Create a configured judge agent, run it on the user message, and parse the result.
+ */
+async function runJudge(
+	systemPrompt: string,
+	userMessage: string,
+	results: BranchResult[],
+	model?: string,
+): Promise<EvaluationResult> {
+	const agent = new Agent();
+	agent.setModel(model ? resolveModel(model) : autoDetectModel(process.env));
+	agent.setSystemPrompt(systemPrompt);
+
+	const responseText = await runAgentAndGetText(agent, userMessage);
+	const parsed = parseEvaluationResult(responseText);
+	return parsed ?? fallbackResult(results);
+}
+
 // ---------------------------------------------------------------------------
 // LlmJudgeEvaluator
 // ---------------------------------------------------------------------------
 
 export class LlmJudgeEvaluator implements Evaluator {
+	readonly name = "llm-judge";
+
 	constructor(private model?: string) {}
 
 	async evaluate(
 		originalPrompt: string,
 		results: BranchResult[],
 	): Promise<EvaluationResult> {
-		const { resolveModel, autoDetectModel } = await import(
-			"../runner/model-aliases.js"
-		);
-		const agent = new Agent();
-		agent.setModel(
-			this.model ? resolveModel(this.model) : autoDetectModel(process.env),
-		);
+		const branchSummary = buildBranchSummary(results);
 
-		agent.setSystemPrompt(
+		return runJudge(
 			"You are an impartial judge evaluating AI agent responses. " +
 				"Your task is to select the best response from multiple branches. " +
 				"Respond ONLY with a JSON object with these fields: " +
 				'{ "winnerId": string, "winnerIndex": number, "reasoning": string, "scores": Record<string, number> }',
-		);
-
-		const branchSummary = buildBranchSummary(results);
-
-		const userMessage =
 			`Original prompt: ${originalPrompt}\n\n` +
-			`Branch results:\n\n${branchSummary}\n\n` +
-			"Select the best branch and respond with JSON: " +
-			'{ "winnerId": "<branchId>", "winnerIndex": <number>, "reasoning": "<why>", "scores": { "<branchId>": <0-1>, ... } }';
-
-		const responseText = await runAgentAndGetText(agent, userMessage);
-
-		const parsed = parseEvaluationResult(responseText);
-		if (parsed) {
-			return parsed;
-		}
-
-		return fallbackResult(results);
+				`Branch results:\n\n${branchSummary}\n\n` +
+				"Select the best branch and respond with JSON: " +
+				'{ "winnerId": "<branchId>", "winnerIndex": <number>, "reasoning": "<why>", "scores": { "<branchId>": <0-1>, ... } }',
+			results,
+			this.model,
+		);
 	}
 }
 
@@ -172,6 +176,8 @@ function validateAgainstSchema(
 }
 
 export class SchemaEvaluator implements Evaluator {
+	readonly name = "schema";
+
 	constructor(
 		private outputSchema: Record<string, unknown>,
 		private fallbackModel?: string,
@@ -232,6 +238,8 @@ export class SchemaEvaluator implements Evaluator {
 // ---------------------------------------------------------------------------
 
 export class CustomEvaluator implements Evaluator {
+	readonly name = "custom";
+
 	constructor(
 		private customPrompt: string,
 		private model?: string,
@@ -241,37 +249,20 @@ export class CustomEvaluator implements Evaluator {
 		originalPrompt: string,
 		results: BranchResult[],
 	): Promise<EvaluationResult> {
-		const { resolveModel, autoDetectModel } = await import(
-			"../runner/model-aliases.js"
-		);
-		const agent = new Agent();
-		agent.setModel(
-			this.model ? resolveModel(this.model) : autoDetectModel(process.env),
-		);
+		const branchSummary = buildBranchSummary(results);
 
-		agent.setSystemPrompt(
+		return runJudge(
 			"You are an evaluator for AI agent responses. " +
 				"Respond ONLY with a JSON object with these fields: " +
 				'{ "winnerId": string, "winnerIndex": number, "reasoning": string, "scores": Record<string, number> }',
-		);
-
-		const branchSummary = buildBranchSummary(results);
-
-		const userMessage =
 			`${this.customPrompt}\n\n` +
-			`Original prompt: ${originalPrompt}\n\n` +
-			`Branch results:\n\n${branchSummary}\n\n` +
-			"Select the best branch and respond with JSON: " +
-			'{ "winnerId": "<branchId>", "winnerIndex": <number>, "reasoning": "<why>", "scores": { "<branchId>": <0-1>, ... } }';
-
-		const responseText = await runAgentAndGetText(agent, userMessage);
-
-		const parsed = parseEvaluationResult(responseText);
-		if (parsed) {
-			return parsed;
-		}
-
-		return fallbackResult(results);
+				`Original prompt: ${originalPrompt}\n\n` +
+				`Branch results:\n\n${branchSummary}\n\n` +
+				"Select the best branch and respond with JSON: " +
+				'{ "winnerId": "<branchId>", "winnerIndex": <number>, "reasoning": "<why>", "scores": { "<branchId>": <0-1>, ... } }',
+			results,
+			this.model,
+		);
 	}
 }
 
