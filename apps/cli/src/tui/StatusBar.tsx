@@ -10,6 +10,8 @@ export interface StatusBarProps {
 	costUsd?: number;
 	durationSecs?: number;
 	status: "idle" | "running" | "completed" | "error";
+	branchCount?: number;
+	totalBranchCostUsd?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -22,6 +24,8 @@ export function StatusBar({
 	costUsd,
 	durationSecs,
 	status,
+	branchCount,
+	totalBranchCostUsd,
 }: StatusBarProps): React.ReactElement {
 	const parts: string[] = [];
 
@@ -48,6 +52,14 @@ export function StatusBar({
 	}
 	if (durationSecs !== undefined) {
 		parts.push(`${durationSecs}s`);
+	}
+
+	// Branch stats (shown when branching is active)
+	if (branchCount !== undefined) {
+		parts.push(`${branchCount} branches`);
+	}
+	if (totalBranchCostUsd !== undefined) {
+		parts.push(`$${totalBranchCostUsd} total`);
 	}
 
 	const text = parts.join(" · ");
