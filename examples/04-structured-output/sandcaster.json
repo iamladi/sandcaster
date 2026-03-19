@@ -1,0 +1,56 @@
+{
+	"systemPrompt": "You are a code analyst. Read the provided source files and extract all TODO comments. For each TODO, identify the file, line number, and categorize the priority based on context.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"todos": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"file": { "type": "string" },
+							"line": { "type": "integer" },
+							"text": { "type": "string" },
+							"priority": {
+								"type": "string",
+								"enum": ["high", "medium", "low"]
+							},
+							"category": {
+								"type": "string",
+								"enum": [
+									"security",
+									"performance",
+									"feature",
+									"refactor",
+									"testing"
+								]
+							}
+						},
+						"required": ["file", "line", "text", "priority", "category"]
+					}
+				},
+				"summary": {
+					"type": "object",
+					"properties": {
+						"totalTodos": { "type": "integer" },
+						"byPriority": {
+							"type": "object",
+							"properties": {
+								"high": { "type": "integer" },
+								"medium": { "type": "integer" },
+								"low": { "type": "integer" }
+							},
+							"required": ["high", "medium", "low"]
+						}
+					},
+					"required": ["totalTodos", "byPriority"]
+				}
+			},
+			"required": ["todos", "summary"]
+		}
+	}
+}

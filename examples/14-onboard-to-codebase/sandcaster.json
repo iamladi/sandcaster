@@ -1,0 +1,62 @@
+{
+	"systemPrompt": "You are a codebase analyst. Read the project structure, entry points, and key files to produce a comprehensive architecture overview. Trace data flow, identify patterns, document the tech stack, and map module dependencies.",
+	"model": "gpt5",
+	"maxTurns": 20,
+	"allowedTools": ["Read", "Glob", "Grep"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"projectName": { "type": "string" },
+				"techStack": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"architecture": {
+					"type": "string",
+					"description": "High-level architecture description"
+				},
+				"modules": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": { "type": "string" },
+							"path": { "type": "string" },
+							"purpose": { "type": "string" },
+							"dependencies": {
+								"type": "array",
+								"items": { "type": "string" }
+							}
+						},
+						"required": ["name", "path", "purpose"]
+					}
+				},
+				"entryPoints": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"file": { "type": "string" },
+							"description": { "type": "string" }
+						},
+						"required": ["file", "description"]
+					}
+				},
+				"patterns": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Key design patterns used in the codebase"
+				}
+			},
+			"required": [
+				"projectName",
+				"techStack",
+				"architecture",
+				"modules",
+				"entryPoints"
+			]
+		}
+	}
+}

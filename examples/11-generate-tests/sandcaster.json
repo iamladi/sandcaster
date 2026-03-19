@@ -1,0 +1,14 @@
+{
+	"systemPrompt": "You are a test engineering specialist. Read the provided source code and generate a comprehensive test suite. Write tests that cover happy paths, edge cases, error conditions, and boundary values. Use descriptive test names.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep", "Bash"],
+	"branching": {
+		"enabled": true,
+		"count": 3,
+		"trigger": "always",
+		"evaluator": {
+			"type": "llm-judge",
+			"prompt": "Evaluate each test suite for coverage completeness, edge case handling, test isolation, and readability. Pick the suite that would catch the most real bugs."
+		}
+	}
+}

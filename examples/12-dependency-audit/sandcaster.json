@@ -1,0 +1,54 @@
+{
+	"systemPrompt": "You are a dependency security auditor. Analyze the provided package.json for known vulnerabilities. For each vulnerable package, identify the CVE, severity, affected version range, and recommended fix version. Prioritize findings by severity.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep", "Bash"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"summary": { "type": "string" },
+				"vulnerabilities": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"package": { "type": "string" },
+							"installedVersion": { "type": "string" },
+							"severity": {
+								"type": "string",
+								"enum": ["critical", "high", "medium", "low"]
+							},
+							"cve": { "type": "string" },
+							"description": { "type": "string" },
+							"fixVersion": { "type": "string" }
+						},
+						"required": [
+							"package",
+							"installedVersion",
+							"severity",
+							"description",
+							"fixVersion"
+						]
+					}
+				},
+				"stats": {
+					"type": "object",
+					"properties": {
+						"totalPackages": { "type": "integer" },
+						"vulnerablePackages": { "type": "integer" },
+						"criticalCount": { "type": "integer" },
+						"highCount": { "type": "integer" }
+					},
+					"required": [
+						"totalPackages",
+						"vulnerablePackages",
+						"criticalCount",
+						"highCount"
+					]
+				}
+			},
+			"required": ["summary", "vulnerabilities", "stats"]
+		}
+	}
+}

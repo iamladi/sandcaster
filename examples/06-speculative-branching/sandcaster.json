@@ -1,0 +1,13 @@
+{
+	"systemPrompt": "You are an expert programmer. Write clean, well-documented code with proper error handling. Consider edge cases and performance.",
+	"model": "gpt5",
+	"branching": {
+		"enabled": true,
+		"count": 3,
+		"trigger": "always",
+		"evaluator": {
+			"type": "llm-judge",
+			"prompt": "Evaluate each implementation for correctness, readability, error handling, and performance. Pick the best overall solution."
+		}
+	}
+}
