@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { BranchConfigSchema } from "./branching/types.js";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -169,6 +170,7 @@ export const QueryRequestSchema = z.object({
 			allowedProviders: z.array(z.enum(SANDBOX_PROVIDER_VALUES)).optional(),
 		})
 		.optional(),
+	branching: BranchConfigSchema.optional(),
 });
 
 export type QueryRequest = z.infer<typeof QueryRequestSchema>;
@@ -211,6 +213,7 @@ export const SandcasterConfigSchema = z.object({
 			pollIntervalMs: z.int().gte(10).lte(1000).default(50),
 		})
 		.optional(),
+	branching: BranchConfigSchema.optional(),
 });
 
 export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;
@@ -286,6 +289,55 @@ export const SandcasterEventSchema = z.discriminatedUnion("type", [
 		content: z.string(),
 		data: z.unknown().optional(),
 	}),
+	// --- Branch event types ---
+	z.object({
+		type: z.literal("branch_request"),
+		alternatives: z.array(z.string().min(1)).min(1).max(10),
+		reason: z.string().optional(),
+	}),
+	z.object({
+		type: z.literal("confidence_report"),
+		level: z.number().gte(0).lte(1),
+		reason: z.string(),
+	}),
+	z.object({
+		type: z.literal("branch_start"),
+		branchId: z.string(),
+		branchIndex: z.number(),
+		totalBranches: z.number(),
+		prompt: z.string(),
+	}),
+	z.object({
+		type: z.literal("branch_progress"),
+		branchId: z.string(),
+		branchIndex: z.number(),
+		status: z.enum(["running", "completed", "error"]),
+		numTurns: z.number().optional(),
+		costUsd: z.number().optional(),
+	}),
+	z.object({
+		type: z.literal("branch_complete"),
+		branchId: z.string(),
+		status: z.enum(["success", "error"]),
+		costUsd: z.number().optional(),
+		numTurns: z.number().optional(),
+		content: z.string().optional(),
+	}),
+	z.object({
+		type: z.literal("branch_selected"),
+		branchId: z.string(),
+		branchIndex: z.number(),
+		reason: z.string(),
+		scores: z.record(z.string(), z.number()).optional(),
+	}),
+	z.object({
+		type: z.literal("branch_summary"),
+		totalBranches: z.number(),
+		successCount: z.number(),
+		totalCostUsd: z.number(),
+		evaluator: z.string(),
+		winnerId: z.string().optional(),
+	}),
 ]);
 
 export type SandcasterEvent = z.infer<typeof SandcasterEventSchema>;
@@ -307,6 +359,11 @@ export const RunSchema = z.object({
 	filesCount: z.number().default(0),
 	feedback: z.string().optional(),
 	feedbackUser: z.string().optional(),
+	// Branch metadata (additive — present only for branched runs)
+	branchCount: z.number().optional(),
+	branchWinnerId: z.string().optional(),
+	branchCosts: z.record(z.string(), z.number()).optional(),
+	evaluatorType: z.string().optional(),
 });
 
 export type Run = z.infer<typeof RunSchema>;

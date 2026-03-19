@@ -24,6 +24,11 @@ vi.mock("@mariozechner/pi-agent-core", () => {
 	};
 });
 
+vi.mock("../../runner/model-aliases.js", () => ({
+	resolveModel: (alias: string) => alias,
+	autoDetectModel: () => "auto-detected-model",
+}));
+
 import {
 	CustomEvaluator,
 	createEvaluator,

@@ -106,11 +106,13 @@ export class LlmJudgeEvaluator implements Evaluator {
 		originalPrompt: string,
 		results: BranchResult[],
 	): Promise<EvaluationResult> {
+		const { resolveModel, autoDetectModel } = await import(
+			"../runner/model-aliases.js"
+		);
 		const agent = new Agent();
-
-		if (this.model) {
-			agent.setModel(this.model);
-		}
+		agent.setModel(
+			this.model ? resolveModel(this.model) : autoDetectModel(process.env),
+		);
 
 		agent.setSystemPrompt(
 			"You are an impartial judge evaluating AI agent responses. " +
@@ -239,11 +241,13 @@ export class CustomEvaluator implements Evaluator {
 		originalPrompt: string,
 		results: BranchResult[],
 	): Promise<EvaluationResult> {
+		const { resolveModel, autoDetectModel } = await import(
+			"../runner/model-aliases.js"
+		);
 		const agent = new Agent();
-
-		if (this.model) {
-			agent.setModel(this.model);
-		}
+		agent.setModel(
+			this.model ? resolveModel(this.model) : autoDetectModel(process.env),
+		);
 
 		agent.setSystemPrompt(
 			"You are an evaluator for AI agent responses. " +
