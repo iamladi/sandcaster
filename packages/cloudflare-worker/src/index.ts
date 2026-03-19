@@ -73,6 +73,10 @@ app.post("/sandbox/:id/files/write", async (c) => {
 		encoding?: string;
 	}>();
 
+	if (!path || content === undefined) {
+		return c.json({ error: "Missing required fields: path, content" }, 400);
+	}
+
 	const sandbox = getSandbox(c.env.Sandbox, sessionId);
 	const writeOpts =
 		encoding === "base64" ? { encoding: "base64" as const } : undefined;
@@ -92,6 +96,9 @@ app.get("/sandbox/:id/files/read", async (c) => {
 
 	const sessionId = c.req.param("id") ?? "";
 	const path = c.req.query("path") ?? "";
+	if (!path) {
+		return c.json({ error: "Missing required query parameter: path" }, 400);
+	}
 	const sandbox = getSandbox(c.env.Sandbox, sessionId);
 	const file = await sandbox.readFile(path);
 
@@ -112,6 +119,10 @@ app.post("/sandbox/:id/exec", async (c) => {
 		cmd: string;
 		timeoutMs?: number;
 	}>();
+
+	if (!cmd) {
+		return c.json({ error: "Missing required field: cmd" }, 400);
+	}
 
 	const sandbox = getSandbox(c.env.Sandbox, sessionId);
 	const result = await sandbox.exec(cmd, {
