@@ -9,8 +9,9 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"hono": "^4",
-		"@cloudflare/workers-types": "^4"
+		"@cloudflare/sandbox": "^0.7.18",
+		"@cloudflare/workers-types": "^4",
+		"hono": "^4"
 	},
 	"devDependencies": {
 		"vitest": "^4",

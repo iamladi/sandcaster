@@ -389,7 +389,7 @@ describe("createVercelProvider", () => {
 		if (!result.ok) throw new Error("unreachable");
 
 		const cmdRes = await result.instance.commands.run("echo hello");
-		expect(runCommand).toHaveBeenCalledWith("echo hello");
+		expect(runCommand).toHaveBeenCalledWith("echo", ["hello"]);
 		expect(cmdRes.exitCode).toBe(0);
 		expect(cmdRes.stdout).toBe("hello\n");
 		expect(cmdRes.stderr).toBe("warn\n");

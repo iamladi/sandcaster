@@ -1,3 +1,20 @@
 name = "sandcaster-sandbox-proxy"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SANDBOX_TRANSPORT = "websocket"
+
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile"
+instance_type = "basic"
+max_instances = 10
+
+[durable_objects]
+bindings = [{ class_name = "Sandbox", name = "Sandbox" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sandbox"]

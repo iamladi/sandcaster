@@ -1,0 +1,59 @@
+{
+	"systemPrompt": "You are a strategic market analyst. When given companies or a market segment, research each competitor by fetching their websites, analyzing their positioning, pricing, features, and strengths/weaknesses. Be data-driven and specific — cite what you find on their sites rather than relying on general knowledge.",
+	"model": "gpt5",
+	"maxTurns": 20,
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"marketSegment": {
+					"type": "string",
+					"description": "The market or product category being analyzed"
+				},
+				"competitors": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": { "type": "string" },
+							"website": { "type": "string" },
+							"positioning": { "type": "string" },
+							"targetAudience": { "type": "string" },
+							"keyFeatures": {
+								"type": "array",
+								"items": { "type": "string" }
+							},
+							"pricingModel": { "type": "string" },
+							"strengths": {
+								"type": "array",
+								"items": { "type": "string" }
+							},
+							"weaknesses": {
+								"type": "array",
+								"items": { "type": "string" }
+							}
+						},
+						"required": [
+							"name",
+							"website",
+							"positioning",
+							"keyFeatures",
+							"strengths",
+							"weaknesses"
+						]
+					}
+				},
+				"marketInsights": {
+					"type": "string",
+					"description": "Key trends, gaps, and opportunities in the market"
+				},
+				"recommendations": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"required": ["marketSegment", "competitors", "marketInsights"]
+		}
+	}
+}

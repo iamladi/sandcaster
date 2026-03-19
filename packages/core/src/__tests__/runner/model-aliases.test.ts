@@ -98,6 +98,16 @@ describe("resolveModel — known aliases", () => {
 		);
 		expect(result).toBe(expected);
 	});
+
+	it('resolves "gpt5mini" to openai gpt-5-mini', () => {
+		const expected = fakeModel("openai", "gpt-5-mini");
+		mockGetModel.mockReturnValue(expected);
+
+		const result = resolveModel("gpt5mini");
+
+		expect(mockGetModel).toHaveBeenCalledWith("openai", "gpt-5-mini");
+		expect(result).toBe(expected);
+	});
 });
 
 // ---------------------------------------------------------------------------

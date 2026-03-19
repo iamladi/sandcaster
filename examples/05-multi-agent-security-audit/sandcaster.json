@@ -1,0 +1,83 @@
+{
+	"systemPrompt": "You are a security team lead. Coordinate your specialized sub-agents to perform a comprehensive security audit of the provided codebase. Delegate dependency scanning, code analysis, and configuration review to the appropriate agents, then synthesize their findings into a unified report with prioritized remediation steps.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep", "Bash"],
+	"agents": {
+		"dependency-scanner": {
+			"description": "Checks dependencies for known vulnerabilities and outdated packages",
+			"prompt": "Scan dependency files (package.json, requirements.txt, etc.) for known CVEs and outdated packages. Report each vulnerability with its severity and recommended fix version.",
+			"tools": ["Read", "Glob", "Grep", "Bash"],
+			"model": "gpt5"
+		},
+		"code-scanner": {
+			"description": "Static analysis for OWASP Top 10 vulnerabilities in source code",
+			"prompt": "Scan all source files for security vulnerabilities including SQL injection, XSS, command injection, path traversal, hardcoded secrets, and other OWASP Top 10 issues. For each finding, identify the exact file, line number, and CWE ID.",
+			"tools": ["Read", "Glob", "Grep"]
+		},
+		"config-scanner": {
+			"description": "Audits configuration files for security misconfigurations",
+			"prompt": "Check configuration files (Dockerfile, docker-compose.yml, CI configs, etc.) for security misconfigurations: exposed secrets, privileged containers, missing security headers.",
+			"tools": ["Read", "Glob", "Grep"],
+			"model": "gpt5"
+		}
+	},
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"riskLevel": {
+					"type": "string",
+					"enum": ["critical", "high", "medium", "low", "informational"]
+				},
+				"summary": { "type": "string" },
+				"vulnerabilities": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"title": { "type": "string" },
+							"severity": {
+								"type": "string",
+								"enum": ["critical", "high", "medium", "low", "informational"]
+							},
+							"category": { "type": "string" },
+							"cwe": { "type": "string" },
+							"file": { "type": "string" },
+							"line": { "type": "integer" },
+							"description": { "type": "string" },
+							"remediation": { "type": "string" }
+						},
+						"required": [
+							"title",
+							"severity",
+							"category",
+							"description",
+							"remediation"
+						]
+					}
+				},
+				"stats": {
+					"type": "object",
+					"properties": {
+						"filesScanned": { "type": "integer" },
+						"totalVulnerabilities": { "type": "integer" },
+						"criticalCount": { "type": "integer" },
+						"highCount": { "type": "integer" },
+						"mediumCount": { "type": "integer" },
+						"lowCount": { "type": "integer" }
+					},
+					"required": [
+						"filesScanned",
+						"totalVulnerabilities",
+						"criticalCount",
+						"highCount",
+						"mediumCount",
+						"lowCount"
+					]
+				}
+			},
+			"required": ["riskLevel", "summary", "vulnerabilities", "stats"]
+		}
+	}
+}

@@ -7,9 +7,9 @@
 import { readFileSync } from "node:fs";
 import { runAgent } from "./runner-main.js";
 
-const config = JSON.parse(
-	readFileSync("/opt/sandcaster/agent_config.json", "utf-8"),
-);
+// Config path passed as CLI argument, fallback to legacy hardcoded path
+const configPath = process.argv[2] ?? "/opt/sandcaster/agent_config.json";
+const config = JSON.parse(readFileSync(configPath, "utf-8"));
 
 function emit(event: Record<string, unknown>): void {
 	process.stdout.write(`${JSON.stringify(event)}\n`);

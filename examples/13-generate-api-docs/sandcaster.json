@@ -1,0 +1,53 @@
+{
+	"systemPrompt": "You are an API documentation specialist. Read the provided source code and generate comprehensive API documentation. For each endpoint, document the HTTP method, path, parameters, request body, response format, and status codes.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"apiTitle": { "type": "string" },
+				"baseUrl": { "type": "string" },
+				"endpoints": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"method": { "type": "string" },
+							"path": { "type": "string" },
+							"description": { "type": "string" },
+							"parameters": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"name": { "type": "string" },
+										"in": { "type": "string" },
+										"type": { "type": "string" },
+										"required": { "type": "boolean" }
+									},
+									"required": ["name", "in", "type"]
+								}
+							},
+							"requestBody": { "type": "object" },
+							"responses": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"status": { "type": "integer" },
+										"description": { "type": "string" }
+									},
+									"required": ["status", "description"]
+								}
+							}
+						},
+						"required": ["method", "path", "description"]
+					}
+				}
+			},
+			"required": ["apiTitle", "endpoints"]
+		}
+	}
+}

@@ -1,0 +1,5 @@
+{
+	"systemPrompt": "You are a helpful assistant running inside an isolated sandbox. You can execute shell commands, read and write files, and help with any task the user asks about.",
+	"model": "gpt5",
+	"sandboxProvider": "vercel"
+}

@@ -216,6 +216,9 @@ describe("createDockerProvider", () => {
 			if (args[0] === "ps") {
 				return Promise.resolve(makeExecaResult({ stdout: "" }));
 			}
+			if (args[0] === "image" && args[1] === "inspect") {
+				return Promise.reject(new Error("No such image"));
+			}
 			if (args[0] === "pull") {
 				return Promise.reject(new Error("image not found"));
 			}
@@ -236,7 +239,7 @@ describe("createDockerProvider", () => {
 			if (args[0] === "ps") {
 				return Promise.resolve(makeExecaResult({ stdout: "" }));
 			}
-			if (args[0] === "pull") {
+			if (args[0] === "image" && args[1] === "inspect") {
 				return Promise.resolve(makeExecaResult());
 			}
 			if (args[0] === "run") {
@@ -340,12 +343,13 @@ describe("createDockerProvider", () => {
 
 		await result.instance.files.write("/workspace/text.txt", "text content");
 
-		const callArgs = mockExeca.mock.calls[0] as [
+		// calls[0] is mkdir -p, calls[1] is tee
+		const teeCall = mockExeca.mock.calls[1] as [
 			string,
 			string[],
 			Record<string, unknown>,
 		];
-		expect(callArgs[2]?.input).toBeInstanceOf(Buffer);
+		expect(teeCall[2]?.input).toBeInstanceOf(Buffer);
 	});
 
 	// -------------------------------------------------------------------------
@@ -569,12 +573,13 @@ describe("createDockerProvider", () => {
 		const bytes = new Uint8Array([0x00, 0xff, 0x80, 0x7f]);
 		await result.instance.files.write("/workspace/binary.bin", bytes);
 
-		const callArgs = mockExeca.mock.calls[0] as [
+		// calls[0] is mkdir -p, calls[1] is tee
+		const teeCall = mockExeca.mock.calls[1] as [
 			string,
 			string[],
 			Record<string, unknown>,
 		];
-		const input = callArgs[2]?.input;
+		const input = teeCall[2]?.input;
 		// Should pass raw bytes, not decoded string
 		expect(input).toBeInstanceOf(Buffer);
 	});

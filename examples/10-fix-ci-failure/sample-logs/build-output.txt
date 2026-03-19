@@ -1,0 +1,39 @@
+Run actions/checkout@v4
+Run actions/setup-node@v4
+  Using node version 20.11.0
+
+Run npm ci
+  added 847 packages in 12s
+
+Run npm run build
+  > my-app@2.1.0 build
+  > tsc && vite build
+
+  src/components/UserProfile.tsx(42,7): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+    Type 'undefined' is not assignable to type 'string'.
+
+  src/utils/api.ts(18,3): error TS2322: Type '{ data: unknown; }' is not assignable to type 'ApiResponse<T>'.
+    Property 'status' is missing in type '{ data: unknown; }' but required in type 'ApiResponse<T>'.
+
+  Found 2 errors in 2 files.
+
+  Error: Process completed with exit code 2.
+
+Run npm test
+  > my-app@2.1.0 test
+  > vitest run
+
+  FAIL src/utils/api.test.ts > fetchUsers > handles network errors
+    AssertionError: expected 'Network error' to equal 'Failed to fetch users'
+
+    - Expected
+    + Received
+
+    - Failed to fetch users
+    + Network error
+
+    ❯ src/utils/api.test.ts:34:28
+
+  Test Files  1 failed | 14 passed
+  Tests  1 failed | 87 passed
+  Error: Process completed with exit code 1.

@@ -204,19 +204,19 @@ describe("sandbox-integration", () => {
 
 		// Runner bundle was written
 		expect(instance.files.write).toHaveBeenCalledWith(
-			"/opt/sandcaster/runner.mjs",
+			"/home/user/.sandcaster/runner.mjs",
 			expect.any(String),
 		);
 
 		// Agent config was written
 		expect(instance.files.write).toHaveBeenCalledWith(
-			"/opt/sandcaster/agent_config.json",
+			"/home/user/.sandcaster/agent_config.json",
 			expect.any(String),
 		);
 
 		// Runner command was executed
 		expect(instance.commands.run).toHaveBeenCalledWith(
-			"node /opt/sandcaster/runner.mjs",
+			"node /home/user/.sandcaster/runner.mjs /home/user/.sandcaster/agent_config.json",
 			expect.any(Object),
 		);
 

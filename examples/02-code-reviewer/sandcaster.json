@@ -1,0 +1,62 @@
+{
+	"systemPrompt": "You are an expert code reviewer. Analyze the provided code for bugs, security vulnerabilities, performance issues, and maintainability concerns. For each finding, identify the exact file, line number, and severity. Provide actionable suggestions — not just what's wrong, but how to fix it.",
+	"model": "gpt5",
+	"allowedTools": ["Read", "Glob", "Grep"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"summary": {
+					"type": "string",
+					"description": "High-level assessment of code quality"
+				},
+				"findings": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"severity": {
+								"type": "string",
+								"enum": ["critical", "warning", "info"]
+							},
+							"category": {
+								"type": "string",
+								"enum": ["bug", "security", "performance", "maintainability"]
+							},
+							"file": { "type": "string" },
+							"line": { "type": "integer" },
+							"title": { "type": "string" },
+							"description": { "type": "string" },
+							"suggestion": { "type": "string" }
+						},
+						"required": [
+							"severity",
+							"category",
+							"file",
+							"title",
+							"description",
+							"suggestion"
+						]
+					}
+				},
+				"stats": {
+					"type": "object",
+					"properties": {
+						"files_reviewed": { "type": "integer" },
+						"total_findings": { "type": "integer" },
+						"critical_count": { "type": "integer" },
+						"warning_count": { "type": "integer" }
+					},
+					"required": [
+						"files_reviewed",
+						"total_findings",
+						"critical_count",
+						"warning_count"
+					]
+				}
+			},
+			"required": ["summary", "findings", "stats"]
+		}
+	}
+}

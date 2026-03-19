@@ -9,12 +9,12 @@ const VITE_CONFIG = resolve(CORE_ROOT, "vite.config.runner.ts");
 
 describe("runner bundle", () => {
 	beforeAll(() => {
-		// Build the runner bundle via Vite
+		// Build the runner bundle via Vite — inlined deps make this slower
 		execSync(`bunx vite build --config ${VITE_CONFIG}`, {
 			cwd: CORE_ROOT,
 			stdio: "pipe",
 		});
-	});
+	}, 60_000);
 
 	it("produces a runner.mjs file", () => {
 		expect(existsSync(BUNDLE_PATH)).toBe(true);
@@ -26,10 +26,11 @@ describe("runner bundle", () => {
 		expect(content).toMatch(/^import\s/m);
 	});
 
-	it("does not inline pi-mono packages (they are externalized)", () => {
+	it("inlines pi-mono packages for sandbox portability", () => {
 		const content = readFileSync(BUNDLE_PATH, "utf-8");
-		// Externalized imports should appear as import statements, not inlined code
-		expect(content).toMatch(/@mariozechner\/pi-agent-core/);
+		// Pi-mono packages are inlined — no import statements referencing them
+		expect(content).not.toMatch(/from\s+["']@mariozechner\/pi-agent-core["']/);
+		expect(content).not.toMatch(/from\s+["']@mariozechner\/pi-ai["']/);
 	});
 
 	it("does not inline node builtins", () => {
