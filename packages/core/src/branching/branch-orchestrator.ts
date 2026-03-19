@@ -3,7 +3,13 @@ import type {
 	SandcasterConfig,
 	SandcasterEvent,
 } from "../schemas.js";
-import type { BranchResult, Evaluator } from "./types.js";
+import { createEvaluator } from "./evaluator.js";
+import type { BranchResult as BranchResultBase, Evaluator } from "./types.js";
+
+/** Internal branch result with properly typed events */
+type BranchResult = Omit<BranchResultBase, "events"> & {
+	events: SandcasterEvent[];
+};
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -91,14 +97,6 @@ function buildBranchConfig(
 // Branch execution
 // ---------------------------------------------------------------------------
 
-interface BranchExecution {
-	branchId: string;
-	branchIndex: number;
-	controller: AbortController;
-	promise: Promise<BranchResult>;
-	events: SandcasterEvent[];
-}
-
 async function runSingleBranch(
 	branchId: string,
 	branchIndex: number,
@@ -179,11 +177,40 @@ export async function* runBranchedAgent(
 		requestId,
 		signal: parentSignal,
 		runAgent,
-		evaluator,
 	} = options;
+
+	// Resolve evaluator: explicit option takes precedence, then config-based creation
+	const evaluator: Evaluator | undefined =
+		options.evaluator ??
+		(config?.branching?.evaluator
+			? createEvaluator(
+					config.branching.evaluator,
+					request.outputFormat as Record<string, unknown> | undefined,
+				)
+			: undefined);
 
 	const startTime = Date.now();
 	const originalTimeoutSecs = request.timeout ?? config?.timeout;
+
+	// --- Always-branch trigger: skip initial run, directly create N branches ---
+	if (config?.branching?.trigger === "always") {
+		const branchCount = config.branching.count ?? 3;
+		const alternatives = Array.from(
+			{ length: branchCount },
+			() => request.prompt,
+		);
+		return yield* runBranchingPath(
+			alternatives,
+			[], // no context events
+			config,
+			request,
+			evaluator,
+			runAgent,
+			parentSignal,
+			originalTimeoutSecs,
+			startTime,
+		);
+	}
 
 	// Run the initial agent
 	const initialGen = runAgent({ request, config, requestId });
@@ -192,8 +219,10 @@ export async function* runBranchedAgent(
 	let branchRequestEvent:
 		| Extract<SandcasterEvent, { type: "branch_request" }>
 		| undefined;
+	let confidenceTriggered = false;
+	let confidenceTriggerAlternatives: string[] | undefined;
 
-	// Stream the initial run, watching for a branch_request event
+	// Stream the initial run, watching for a branch_request or confidence_report event
 	for await (const event of initialGen) {
 		if (parentSignal?.aborted) {
 			await initialGen.return(undefined);
@@ -204,6 +233,27 @@ export async function* runBranchedAgent(
 			branchRequestEvent = event;
 			// Stop yielding initial events — we'll branch now
 			break;
+		}
+
+		// Always yield confidence_report events to the consumer
+		if (event.type === "confidence_report") {
+			yield event;
+
+			// Confidence trigger: only fire once (one-shot)
+			if (
+				!confidenceTriggered &&
+				config?.branching?.trigger === "confidence" &&
+				event.level < (config.branching.confidenceThreshold ?? 0.5)
+			) {
+				confidenceTriggered = true;
+				const branchCount = config.branching.count ?? 3;
+				confidenceTriggerAlternatives = Array.from(
+					{ length: branchCount },
+					(_, i) =>
+						`Try a different approach: ${request.prompt}. Previous approach had low confidence because: ${event.reason}. Attempt #${i + 1}`,
+				);
+			}
+			continue;
 		}
 
 		// Capture context events for potential mid-run branching
@@ -218,6 +268,29 @@ export async function* runBranchedAgent(
 		yield event;
 	}
 
+	// Confidence trigger fired: drain the rest of the initial run then branch
+	if (confidenceTriggerAlternatives) {
+		// Drain remaining events from initial gen (discard after trigger)
+		for await (const _event of initialGen) {
+			if (parentSignal?.aborted) {
+				await initialGen.return(undefined);
+				break;
+			}
+		}
+
+		return yield* runBranchingPath(
+			confidenceTriggerAlternatives,
+			contextEvents,
+			config,
+			request,
+			evaluator,
+			runAgent,
+			parentSignal,
+			originalTimeoutSecs,
+			startTime,
+		);
+	}
+
 	// No branching occurred: drain any remaining events from initial gen
 	if (!branchRequestEvent) {
 		for await (const event of initialGen) {
@@ -230,9 +303,37 @@ export async function* runBranchedAgent(
 		return;
 	}
 
-	// --- Branching path ---
+	// --- Explicit branch_request trigger ---
 
 	const alternatives = branchRequestEvent.alternatives;
+	return yield* runBranchingPath(
+		alternatives,
+		contextEvents,
+		config,
+		request,
+		evaluator,
+		runAgent,
+		parentSignal,
+		originalTimeoutSecs,
+		startTime,
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Shared branching execution path
+// ---------------------------------------------------------------------------
+
+async function* runBranchingPath(
+	alternatives: string[],
+	contextEvents: SandcasterEvent[],
+	config: SandcasterConfig | undefined,
+	request: QueryRequest,
+	evaluator: Evaluator | undefined,
+	runAgent: BranchRunOptions["runAgent"],
+	parentSignal: AbortSignal | undefined,
+	originalTimeoutSecs: number | undefined,
+	startTime: number,
+): AsyncGenerator<SandcasterEvent> {
 	const totalBranches = alternatives.length;
 	const staggerDelayMs = config?.branching?.staggerDelayMs ?? 200;
 
@@ -404,7 +505,7 @@ export async function* runBranchedAgent(
 
 	// Yield winning branch's events
 	for (const event of winnerResult.events) {
-		yield event;
+		yield event as SandcasterEvent;
 	}
 
 	// Emit branch_summary

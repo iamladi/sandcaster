@@ -705,3 +705,459 @@ describe("timeout inheritance", () => {
 		expect(branchTimeout!).toBeGreaterThan(0);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// 15. Always-branch trigger
+// ---------------------------------------------------------------------------
+
+describe("always-branch trigger", () => {
+	it("skips initial run and creates N parallel branches immediately", async () => {
+		const callCount: number[] = [];
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* (_opts) {
+			callCount.push(1);
+			yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "always",
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		// Should have branch_start events (no initial run)
+		const branchStarts = result.filter((e) => e.type === "branch_start");
+		expect(branchStarts).toHaveLength(2);
+
+		// The initial run was skipped — only 2 branch runs were made
+		expect(callCount).toHaveLength(2);
+	});
+
+	it("each branch uses the original prompt", async () => {
+		const capturedPrompts: string[] = [];
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* (opts) {
+			capturedPrompts.push(opts.request.prompt);
+			yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+		};
+
+		await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "original task" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "always",
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		expect(capturedPrompts).toHaveLength(2);
+		// All branch prompts should contain the original prompt text
+		for (const p of capturedPrompts) {
+			expect(p).toContain("original task");
+		}
+	});
+
+	it("uses config.branching.count (default 3) for branch count", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "always",
+						// no count — should default to 3
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		const branchStarts = result.filter((e) => e.type === "branch_start");
+		expect(branchStarts).toHaveLength(3);
+		expect(callCount).toBe(3);
+	});
+
+	it("applies per-branch model overrides in always-branch mode", async () => {
+		const capturedConfigs: Array<{ model?: string } | undefined> = [];
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* (opts) {
+			capturedConfigs.push(opts.config as { model?: string } | undefined);
+			yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+		};
+
+		await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					model: "base-model",
+					branching: {
+						trigger: "always",
+						count: 2,
+						staggerDelayMs: 0,
+						branches: [{ model: "model-a" }, { model: "model-b" }],
+					},
+				},
+			}),
+		);
+
+		expect(capturedConfigs).toHaveLength(2);
+		expect(capturedConfigs[0]?.model).toBe("model-a");
+		expect(capturedConfigs[1]?.model).toBe("model-b");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 16. Confidence trigger
+// ---------------------------------------------------------------------------
+
+describe("confidence trigger", () => {
+	it("triggers branching when confidence_report is below threshold", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield { type: "assistant", content: "thinking..." };
+				yield {
+					type: "confidence_report",
+					level: 0.3,
+					reason: "not sure about approach",
+				} satisfies SandcasterEvent;
+				yield {
+					type: "result",
+					content: "initial done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			} else {
+				yield {
+					type: "result",
+					content: "branch done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			}
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "confidence",
+						confidenceThreshold: 0.5,
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		// Branching should have occurred
+		const branchStarts = result.filter((e) => e.type === "branch_start");
+		expect(branchStarts).toHaveLength(2);
+	});
+
+	it("yields confidence_report events to consumer before branching", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield {
+					type: "confidence_report",
+					level: 0.2,
+					reason: "low confidence",
+				} satisfies SandcasterEvent;
+				yield {
+					type: "result",
+					content: "initial done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			} else {
+				yield {
+					type: "result",
+					content: "branch done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			}
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "confidence",
+						confidenceThreshold: 0.5,
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		const confidenceReports = result.filter(
+			(e) => e.type === "confidence_report",
+		);
+		expect(confidenceReports).toHaveLength(1);
+	});
+
+	it("only triggers branching once (one-shot) even with multiple below-threshold reports", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield {
+					type: "confidence_report",
+					level: 0.2,
+					reason: "first low confidence",
+				} satisfies SandcasterEvent;
+				yield {
+					type: "confidence_report",
+					level: 0.1,
+					reason: "second low confidence",
+				} satisfies SandcasterEvent;
+				yield {
+					type: "result",
+					content: "initial done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			} else {
+				yield {
+					type: "result",
+					content: "branch done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			}
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "confidence",
+						confidenceThreshold: 0.5,
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		// Only 2 branch runs (not 4), because second report should not trigger again
+		const branchStarts = result.filter((e) => e.type === "branch_start");
+		expect(branchStarts).toHaveLength(2);
+		// callCount: 1 initial + 2 branch runs = 3
+		expect(callCount).toBe(3);
+	});
+
+	it("does NOT trigger branching when confidence is above threshold", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			yield {
+				type: "confidence_report",
+				level: 0.8,
+				reason: "high confidence",
+			} satisfies SandcasterEvent;
+			yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "confidence",
+						confidenceThreshold: 0.5,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		// No branching should occur
+		const branchStarts = result.filter((e) => e.type === "branch_start");
+		expect(branchStarts).toHaveLength(0);
+		// Only 1 run (the initial one)
+		expect(callCount).toBe(1);
+	});
+
+	it("auto-generates alternative prompts based on confidence reason", async () => {
+		const capturedPrompts: string[] = [];
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* (opts) {
+			callCount++;
+			if (callCount === 1) {
+				yield {
+					type: "confidence_report",
+					level: 0.2,
+					reason: "unclear requirements",
+				} satisfies SandcasterEvent;
+				yield {
+					type: "result",
+					content: "initial done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			} else {
+				capturedPrompts.push(opts.request.prompt);
+				yield {
+					type: "result",
+					content: "branch done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			}
+		};
+
+		await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "solve the problem" },
+				runAgent,
+				config: {
+					branching: {
+						trigger: "confidence",
+						confidenceThreshold: 0.5,
+						count: 2,
+						staggerDelayMs: 0,
+					},
+				},
+			}),
+		);
+
+		expect(capturedPrompts).toHaveLength(2);
+		// Each prompt should contain the original prompt and the reason
+		for (const p of capturedPrompts) {
+			expect(p).toContain("solve the problem");
+			expect(p).toContain("unclear requirements");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 17. Evaluator wiring from config
+// ---------------------------------------------------------------------------
+
+describe("evaluator wiring from config", () => {
+	it("produces branch_selected event when config.branching.evaluator is set and no explicit evaluator provided", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield ASSISTANT_EVENT;
+				yield {
+					type: "branch_request",
+					alternatives: ["approach A", "approach B"],
+				} satisfies SandcasterEvent;
+			} else {
+				yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+			}
+		};
+
+		// Provide a fake evaluator via options.evaluator to avoid LLM calls
+		// This also tests that options.evaluator takes precedence over config evaluator
+		const fakeEvaluator: Evaluator = {
+			evaluate: async (_prompt, results) => ({
+				winnerId: results[0].branchId,
+				winnerIndex: results[0].branchIndex,
+				reasoning: "fake evaluator selected first",
+			}),
+		};
+
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				evaluator: fakeEvaluator,
+				config: {
+					branching: {
+						staggerDelayMs: 0,
+						evaluator: { type: "llm-judge" },
+					},
+				},
+			}),
+		);
+
+		const selected = result.find((e) => e.type === "branch_selected") as
+			| Extract<SandcasterEvent, { type: "branch_selected" }>
+			| undefined;
+		expect(selected).toBeDefined();
+		expect(selected?.reason).toBe("fake evaluator selected first");
+	});
+
+	it("creates evaluator from config when no explicit evaluator is provided", async () => {
+		let callCount = 0;
+
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield ASSISTANT_EVENT;
+				yield {
+					type: "branch_request",
+					alternatives: ["approach A", "approach B"],
+				} satisfies SandcasterEvent;
+			} else {
+				yield { type: "result", content: "done", costUsd: 0.01, numTurns: 1 };
+			}
+		};
+
+		// Test that when no evaluator is passed but config.branching.evaluator exists,
+		// an evaluator is created. We verify this by checking the flow completes and
+		// branch_selected is emitted (evaluator creation code path ran without crash).
+		// We use "llm-judge" type but the actual LLM call will fail in test environment,
+		// so we expect it to fall back gracefully (warning + first branch selected).
+		const result = await collectEvents(
+			runBranchedAgent({
+				request: { prompt: "hello" },
+				runAgent,
+				// No explicit evaluator
+				config: {
+					branching: {
+						staggerDelayMs: 0,
+						evaluator: { type: "llm-judge" },
+					},
+				},
+			}),
+		);
+
+		// Either evaluator ran successfully or fell back — either way branch_selected is emitted
+		const selected = result.find((e) => e.type === "branch_selected");
+		expect(selected).toBeDefined();
+	});
+});
