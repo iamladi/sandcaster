@@ -38,7 +38,8 @@ export function groupBy<T>(
 	const result: Record<string, T[]> = {};
 	for (const item of items) {
 		const key = keyFn(item);
-		(result[key] ??= []).push(item);
+		if (!result[key]) result[key] = [];
+		result[key].push(item);
 	}
 	return result;
 }

@@ -9,12 +9,12 @@ const VITE_CONFIG = resolve(CORE_ROOT, "vite.config.runner.ts");
 
 describe("runner bundle", () => {
 	beforeAll(() => {
-		// Build the runner bundle via Vite
+		// Build the runner bundle via Vite — inlined deps make this slower
 		execSync(`bunx vite build --config ${VITE_CONFIG}`, {
 			cwd: CORE_ROOT,
 			stdio: "pipe",
 		});
-	});
+	}, 60_000);
 
 	it("produces a runner.mjs file", () => {
 		expect(existsSync(BUNDLE_PATH)).toBe(true);
