@@ -110,6 +110,16 @@ export function createVercelProvider(): SandboxProvider {
 			if (config.timeoutMs !== undefined) {
 				createOpts.timeoutMs = config.timeoutMs;
 			}
+			if (config.envs !== undefined) {
+				// Filter out empty values — Vercel API rejects them
+				const filtered: Record<string, string> = {};
+				for (const [k, v] of Object.entries(config.envs)) {
+					if (v) filtered[k] = v;
+				}
+				if (Object.keys(filtered).length > 0) {
+					createOpts.env = filtered;
+				}
+			}
 
 			// biome-ignore lint/suspicious/noExplicitAny: Vercel SDK types are opaque
 			let sbx: any;
@@ -170,7 +180,11 @@ export function createVercelProvider(): SandboxProvider {
 							// Ensure parent directory exists before writing
 							const dir = posix.dirname(path);
 							if (dir && dir !== "/") {
-								await sbx.mkDir(dir);
+								try {
+									await sbx.mkDir(dir);
+								} catch {
+									// Directory may already exist — ignore
+								}
 							}
 							await sbx.writeFiles([{ path, content: buffer }]);
 						},
@@ -190,7 +204,9 @@ export function createVercelProvider(): SandboxProvider {
 							cmd: string,
 							opts?: CommandOptions,
 						): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-							const command = await sbx.runCommand(cmd);
+							// Vercel SDK uses fork/exec — split command into binary + args
+							const parts = cmd.split(/\s+/);
+							const command = await sbx.runCommand(parts[0], parts.slice(1));
 							const { stdout, stderr } = await collectLogs(command.logs, opts);
 							return { stdout, stderr, exitCode: command.exitCode };
 						},

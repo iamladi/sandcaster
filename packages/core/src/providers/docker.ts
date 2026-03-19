@@ -46,16 +46,21 @@ export function createDockerProvider(): SandboxProvider {
 
 			const { execa } = await import("execa");
 
-			// Pull / verify image exists
+			// Verify image exists: check local first, then try pulling
 			try {
-				await execa("docker", ["pull", template]);
-			} catch (err) {
-				return {
-					ok: false,
-					code: "TEMPLATE_NOT_FOUND",
-					message: `Docker image '${template}' could not be pulled: ${err instanceof Error ? err.message : String(err)}`,
-					hint: "Ensure the image exists locally or is available on Docker Hub. Run: docker pull <image>",
-				};
+				await execa("docker", ["image", "inspect", template]);
+			} catch {
+				// Not found locally — try pulling
+				try {
+					await execa("docker", ["pull", template]);
+				} catch (err) {
+					return {
+						ok: false,
+						code: "TEMPLATE_NOT_FOUND",
+						message: `Docker image '${template}' could not be pulled: ${err instanceof Error ? err.message : String(err)}`,
+						hint: "Ensure the image exists locally or is available on Docker Hub. Run: docker pull <image>",
+					};
+				}
 			}
 
 			// Build docker run args
@@ -108,8 +113,18 @@ export function createDockerProvider(): SandboxProvider {
 						path: string,
 						content: string | Uint8Array,
 					): Promise<void> {
+						// Ensure parent directory exists
+						const lastSlash = path.lastIndexOf("/");
+						if (lastSlash > 0) {
+							await execa("docker", [
+								"exec",
+								containerId,
+								"mkdir",
+								"-p",
+								path.substring(0, lastSlash),
+							]);
+						}
 						const input = Buffer.from(content);
-						// Use tee with path as argument — avoids shell injection
 						await execa("docker", ["exec", "-i", containerId, "tee", path], {
 							input,
 							stdout: "ignore",
