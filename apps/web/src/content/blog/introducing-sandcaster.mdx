@@ -1,0 +1,74 @@
+---
+title: "Introducing Sandcaster"
+description: "An open-source TypeScript runtime for AI agents in isolated sandboxes."
+date: 2026-03-20
+author: "Sandcaster Team"
+tags: ["launch", "open-source"]
+---
+
+## Why We Built Sandcaster
+
+Most developers building AI agents face the same frustration: raw LLM SDKs are too low-level, while existing frameworks are too opinionated. You end up either writing a lot of boilerplate plumbing, or fighting an abstraction that doesn't fit your use case.
+
+We wanted a runtime that sits at the right level of abstraction — one that handles sandbox lifecycle, streaming, multi-model routing, and agent orchestration out of the box, without locking you into a particular framework or cloud provider.
+
+That's Sandcaster.
+
+## What It Does
+
+Sandcaster is a TypeScript runtime for AI agents that run in isolated sandboxes. It handles the infrastructure so you can focus on agent behavior.
+
+- **Isolated execution**: Every agent run is isolated in its own sandbox — E2B, Docker, Vercel, or Cloudflare Workers. No shared state, no cross-contamination.
+- **Multi-model**: Switch between Anthropic, OpenAI, Google, and OpenRouter without changing your agent code.
+- **Streaming by default**: All responses stream over SSE. The API, SDK, and CLI all support streaming out of the box.
+- **Config-driven**: Define your agents in `sandcaster.json`. No code required for common configurations.
+
+## Key Features
+
+**Starters** — Six built-in agent templates you can deploy immediately: `general-assistant`, `research-brief`, `document-analyst`, `support-triage`, `api-extractor`, and `security-audit`.
+
+**Multi-agent orchestration** — Run multiple agents in parallel or sequence. Pass context between agents using the composite sandbox model.
+
+**Skills system** — Extend any agent with reusable capabilities defined in `SKILL.md` files. Skills are composable and version-controlled alongside your code.
+
+**SDK and API** — `@sandcaster/sdk` provides a typed TypeScript client. The Hono-based API server handles routing, auth, and streaming.
+
+**CLI with TUI** — The Ink-based CLI gives you a rich terminal interface for running agents, watching logs, and inspecting sandbox state.
+
+**Slack integration** — The included Slack bot lets your team trigger agents directly from Slack channels.
+
+## Getting Started
+
+```bash
+bun add @sandcaster/sdk
+```
+
+Create a `sandcaster.json` in your project root:
+
+```json
+{
+  "starter": "general-assistant",
+  "model": "claude-sonnet-4-5",
+  "sandbox": "e2b"
+}
+```
+
+Run your first agent:
+
+```bash
+bunx sandcaster run "Summarize the latest commits in this repo"
+```
+
+## What's Next
+
+We're actively working on:
+
+- **Search integration** — Built-in web search and document retrieval for research agents
+- **Analytics** — Run metrics, cost tracking, and latency dashboards
+- **Interactive API playground** — Test and debug agents directly from the browser
+
+## Get Involved
+
+Sandcaster is open source. Read the [docs](/docs/getting-started) to get started, or explore the source on [GitHub](https://github.com/sandcaster/sandcaster).
+
+We're building this in public. If you run into issues or have ideas, open an issue — we read everything.
