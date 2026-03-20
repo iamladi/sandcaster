@@ -8,8 +8,8 @@ interface Props {
 const { title, description, canonicalUrl } = Astro.props;
 const pageTitle =
   title === "Sandcaster" ? "Sandcaster" : `${title} | Sandcaster`;
-const siteUrl = "https://getsandcaster.com";
-const resolvedCanonical = canonicalUrl ?? siteUrl;
+const resolvedCanonical =
+  canonicalUrl ?? new URL(Astro.url.pathname, Astro.site).href;
 ---
 
 <meta charset="UTF-8" />
