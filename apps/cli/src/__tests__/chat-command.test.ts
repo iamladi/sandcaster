@@ -40,6 +40,7 @@ function makeDeps(overrides: Partial<ChatDeps> = {}): ChatDeps {
 		resolveChatConfig: vi.fn().mockReturnValue(defaultChatConfig),
 		createChatBot: vi.fn().mockReturnValue({ bot, pool }),
 		createSessionManager: vi.fn().mockReturnValue(sm),
+		createSessionStore: vi.fn().mockReturnValue({}),
 		sandboxFactory: vi.fn(),
 		runAgent: vi.fn(),
 		stdout: { write: vi.fn().mockReturnValue(true) },

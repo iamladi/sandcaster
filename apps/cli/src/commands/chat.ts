@@ -33,6 +33,7 @@ export interface ChatDeps {
 	resolveChatConfig: (explicit: Record<string, unknown>) => ChatConfig;
 	createChatBot: (options: ChatBotOptions) => ChatBotResult;
 	createSessionManager: (opts: SessionManagerOptions) => SessionManager;
+	createSessionStore: () => ISessionStore;
 	sandboxFactory: SessionSandboxFactory;
 	runAgent: SessionManagerOptions["runAgent"];
 	stdout: { write: (data: string) => boolean };
@@ -76,7 +77,7 @@ export async function executeChat(
 	};
 
 	const sessionManager = deps.createSessionManager({
-		store: createInMemorySessionStore(),
+		store: deps.createSessionStore(),
 		sandboxFactory: deps.sandboxFactory,
 		runAgent: deps.runAgent,
 		onSessionExpired,
@@ -115,46 +116,6 @@ export async function executeChat(
 }
 
 // ---------------------------------------------------------------------------
-// Minimal in-memory session store for chat runtime
-// ---------------------------------------------------------------------------
-
-function createInMemorySessionStore(): ISessionStore {
-	const records = new Map<string, SessionRecord>();
-
-	return {
-		create(record: SessionRecord): void {
-			records.set(record.id, { ...record });
-		},
-		get(id: string): SessionRecord | undefined {
-			return records.get(id);
-		},
-		update(id: string, updates: Partial<SessionRecord>): void {
-			const existing = records.get(id);
-			if (existing) {
-				records.set(id, { ...existing, ...updates });
-			}
-		},
-		list(limit?: number): SessionRecord[] {
-			const all = [...records.values()];
-			return limit !== undefined ? all.slice(0, limit) : all;
-		},
-		delete(id: string): void {
-			records.delete(id);
-		},
-		getActiveRecords(): SessionRecord[] {
-			return [...records.values()].filter(
-				(r) => r.status === "active" || r.status === "running",
-			);
-		},
-		activeCount(): number {
-			return [...records.values()].filter(
-				(r) => r.status === "active" || r.status === "running",
-			).length;
-		},
-	};
-}
-
-// ---------------------------------------------------------------------------
 // Production sandbox factory
 // ---------------------------------------------------------------------------
 
@@ -177,6 +138,43 @@ const prodSandboxFactory: SessionSandboxFactory = async (opts) => {
 };
 
 // ---------------------------------------------------------------------------
+// In-memory session store (ephemeral — no disk I/O, no stale-record risk)
+// ---------------------------------------------------------------------------
+
+const ACTIVE_STATUSES = new Set(["initializing", "active", "running"]);
+
+function createInMemorySessionStore(): ISessionStore {
+	const records = new Map<string, SessionRecord>();
+	return {
+		create(record: SessionRecord): void {
+			records.set(record.id, { ...record });
+		},
+		get(id: string): SessionRecord | undefined {
+			return records.get(id);
+		},
+		update(id: string, updates: Partial<SessionRecord>): void {
+			const existing = records.get(id);
+			if (existing) {
+				records.set(id, { ...existing, ...updates });
+			}
+		},
+		list(limit?: number): SessionRecord[] {
+			const all = [...records.values()];
+			return limit !== undefined ? all.slice(0, limit) : all;
+		},
+		delete(id: string): void {
+			records.delete(id);
+		},
+		getActiveRecords(): SessionRecord[] {
+			return [...records.values()].filter((r) => ACTIVE_STATUSES.has(r.status));
+		},
+		activeCount(): number {
+			return this.getActiveRecords().length;
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Production deps
 // ---------------------------------------------------------------------------
 
@@ -186,6 +184,7 @@ const prodDeps: ChatDeps = {
 	createChatBot: coreCreateChatBot,
 	createSessionManager: (opts: SessionManagerOptions) =>
 		new SessionManager(opts),
+	createSessionStore: createInMemorySessionStore,
 	sandboxFactory: prodSandboxFactory,
 	runAgent: runAgentOnInstance,
 	stdout: process.stdout,

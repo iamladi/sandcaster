@@ -101,17 +101,15 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 	const pool = new SessionPool();
 	const dedup = makeDeduper();
 
-	// -------------------------------------------------------------------------
-	// onNewMention handler
-	// -------------------------------------------------------------------------
-
-	bot.onNewMention(async (thread: Thread, message: Message) => {
-		// Access control
+	// Shared preamble: access control → dedup → mutex → delegate → error handling
+	async function withGuards(
+		thread: Thread,
+		message: Message,
+		work: (threadKey: string) => Promise<void>,
+	): Promise<void> {
 		if (!isAllowed(thread.channelId, message.author.userId, chatConfig)) {
 			return;
 		}
-
-		// Dedup
 		if (dedup.has(message.id)) {
 			return;
 		}
@@ -125,26 +123,29 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 
 		const release = await pool.acquireMutex(threadKey);
 		try {
-			// Create a new session
-			const { sessionId, events } = await sessionManager.createSession(
-				{ prompt: message.text },
-				config,
-			);
-
-			// Register in pool
-			pool.register(threadKey, sessionId);
-
-			// Subscribe to thread for follow-up messages (after session creation succeeds)
-			await thread.subscribe();
-
-			// Stream response
-			await thread.post(eventToTextStream(events));
+			await work(threadKey);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);
 			await thread.post(`Error: ${msg}`);
 		} finally {
 			release();
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// onNewMention handler
+	// -------------------------------------------------------------------------
+
+	bot.onNewMention(async (thread: Thread, message: Message) => {
+		await withGuards(thread, message, async (threadKey) => {
+			const { sessionId, events } = await sessionManager.createSession(
+				{ prompt: message.text },
+				config,
+			);
+			pool.register(threadKey, sessionId);
+			await thread.subscribe();
+			await thread.post(eventToTextStream(events));
+		});
 	});
 
 	// -------------------------------------------------------------------------
@@ -152,36 +153,16 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 	// -------------------------------------------------------------------------
 
 	bot.onSubscribedMessage(async (thread: Thread, message: Message) => {
-		// Access control
-		if (!isAllowed(thread.channelId, message.author.userId, chatConfig)) {
-			return;
-		}
-
-		// Dedup
-		if (dedup.has(message.id)) {
-			return;
-		}
-		dedup.add(message.id);
-
-		const threadKey = SessionPool.makeKey(
-			thread.adapter.name,
-			thread.channelId,
-			thread.id,
-		);
-
-		const release = await pool.acquireMutex(threadKey);
-		try {
+		await withGuards(thread, message, async (threadKey) => {
 			const existingSessionId = pool.resolve(threadKey);
 
 			if (existingSessionId) {
-				// Send to existing session
 				const events = await sessionManager.sendMessage(existingSessionId, {
 					prompt: message.text,
 				});
 				await thread.post(eventToTextStream(events));
 			} else {
 				// Re-engagement: session expired, rebuild context
-				// Exclude the current message to avoid duplication (it's appended separately)
 				const previousMessages: {
 					authorName: string;
 					text: string;
@@ -196,10 +177,7 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 					});
 				}
 
-				const context = buildThreadContext(
-					previousMessages,
-					chatConfig.botName ?? "Sandcaster",
-				);
+				const context = buildThreadContext(previousMessages, userName);
 				const prompt = context ? `${context}\n\n${message.text}` : message.text;
 
 				const { sessionId, events } = await sessionManager.createSession(
@@ -210,12 +188,7 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 				pool.register(threadKey, sessionId);
 				await thread.post(eventToTextStream(events));
 			}
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			await thread.post(`Error: ${msg}`);
-		} finally {
-			release();
-		}
+		});
 	});
 
 	return { bot, pool };

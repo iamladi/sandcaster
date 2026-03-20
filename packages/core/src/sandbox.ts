@@ -607,7 +607,7 @@ export async function* runAgentOnInstance(
 	const stream = new PassThrough({ objectMode: true });
 
 	let stdoutBuffer = "";
-	let _stderrBuffer = "";
+	let stderrBuffer = "";
 	const onStdout = (data: string) => {
 		stdoutBuffer += data;
 		const lines = stdoutBuffer.split("\n");
@@ -622,10 +622,10 @@ export async function* runAgentOnInstance(
 			timeoutMs: timeoutMs * 6,
 			onStdout,
 			onStderr: (data: string) => {
-				if (_stderrBuffer.length + data.length > 500) {
-					_stderrBuffer = (_stderrBuffer + data).slice(-500);
+				if (stderrBuffer.length + data.length > 500) {
+					stderrBuffer = (stderrBuffer + data).slice(-500);
 				} else {
-					_stderrBuffer += data;
+					stderrBuffer += data;
 				}
 			},
 		})
@@ -655,8 +655,8 @@ export async function* runAgentOnInstance(
 	} catch (streamErr) {
 		const errMsg =
 			streamErr instanceof Error ? streamErr.message : String(streamErr);
-		const detail = _stderrBuffer.trim()
-			? `${errMsg}\nstderr: ${_stderrBuffer.trim()}`
+		const detail = stderrBuffer.trim()
+			? `${errMsg}\nstderr: ${stderrBuffer.trim()}`
 			: errMsg;
 		yield {
 			type: "error",
