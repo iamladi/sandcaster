@@ -1,5 +1,5 @@
 {
-	"name": "@sandcaster/slack-bot",
+	"name": "@sandcaster/chat",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
@@ -18,7 +18,14 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@sandcaster/core": "workspace:*"
+		"@sandcaster/core": "workspace:*",
+		"chat": "^4.20.2",
+		"@chat-adapter/slack": "^4.20.2",
+		"@chat-adapter/discord": "^4.20.2",
+		"@chat-adapter/telegram": "^4.20.2",
+		"@chat-adapter/state-memory": "^4.20.2",
+		"hono": "^4.12.7",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@sandcaster/ts-config": "workspace:*"

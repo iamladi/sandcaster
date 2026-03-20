@@ -227,7 +227,7 @@ describe("executeChat", () => {
 		await executeChat({}, deps);
 
 		const written = (deps.stdout.write as ReturnType<typeof vi.fn>).mock.calls
-			.map((c: [string]) => c[0])
+			.map((c: unknown[]) => c[0])
 			.join("");
 		expect(written).toContain("Slack");
 		expect(written).toContain("Discord");

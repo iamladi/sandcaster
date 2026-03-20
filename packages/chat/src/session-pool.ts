@@ -19,6 +19,7 @@ export class SessionPool {
 	/** Remove mapping for a thread */
 	remove(threadKey: string): void {
 		this.sessions.delete(threadKey);
+		this.mutexes.delete(threadKey);
 	}
 
 	/** Remove mapping by session ID (used for expiry callback) */
@@ -26,6 +27,7 @@ export class SessionPool {
 		for (const [key, value] of this.sessions) {
 			if (value === sessionId) {
 				this.sessions.delete(key);
+				this.mutexes.delete(key);
 				return;
 			}
 		}

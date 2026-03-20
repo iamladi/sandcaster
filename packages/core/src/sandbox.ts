@@ -556,6 +556,132 @@ export async function* runAgentInSandbox(
 }
 
 // ---------------------------------------------------------------------------
+// runAgentOnInstance — run agent on a pre-existing sandbox instance
+// ---------------------------------------------------------------------------
+
+/**
+ * Run an AI agent on an already-created sandbox instance.
+ * This is the `runAgent` function expected by `SessionManagerOptions`.
+ * Unlike `runAgentInSandbox`, it does NOT create or kill the sandbox.
+ */
+export async function* runAgentOnInstance(
+	instance: SandboxInstance,
+	request: QueryRequest,
+	config?: SandcasterConfig,
+	_signal?: AbortSignal,
+): AsyncGenerator<SandcasterEvent> {
+	const timeoutSecs = request.timeout ?? config?.timeout ?? 300;
+	const timeoutMs = timeoutSecs * 1000;
+	const envs = buildEnvs(request);
+
+	const runnerDir = `${instance.workDir}/.sandcaster`;
+	const runnerPath = `${runnerDir}/runner.mjs`;
+	const configPath = `${runnerDir}/agent_config.json`;
+
+	// Upload runner bundle
+	await instance.files.write(runnerPath, _getRunnerBundle());
+
+	// Upload agent config
+	const agentConfig = buildAgentConfig(request, config);
+	await instance.files.write(configPath, JSON.stringify(agentConfig));
+
+	// Upload user files
+	if (request.files && Object.keys(request.files).length > 0) {
+		await uploadFiles(instance, request.files);
+	}
+
+	// Upload skills
+	const extraSkills = request.extraSkills;
+	if (extraSkills && Object.keys(extraSkills).length > 0) {
+		const skillsList = Object.entries(extraSkills).map(([name, content]) => ({
+			name,
+			content,
+		}));
+		await uploadSkills(instance, skillsList);
+	}
+
+	// Create extraction marker
+	const markerPath = await createExtractionMarker(instance, "");
+
+	// Execute runner + stream events
+	const stream = new PassThrough({ objectMode: true });
+
+	let stdoutBuffer = "";
+	let _stderrBuffer = "";
+	const onStdout = (data: string) => {
+		stdoutBuffer += data;
+		const lines = stdoutBuffer.split("\n");
+		stdoutBuffer = lines.pop() ?? "";
+		for (const line of lines) {
+			if (line.trim()) stream.push(line);
+		}
+	};
+
+	const runPromise = instance.commands
+		.run(`node ${runnerPath} ${configPath}`, {
+			timeoutMs: timeoutMs * 6,
+			onStdout,
+			onStderr: (data: string) => {
+				if (_stderrBuffer.length + data.length > 500) {
+					_stderrBuffer = (_stderrBuffer + data).slice(-500);
+				} else {
+					_stderrBuffer += data;
+				}
+			},
+		})
+		.then(() => {
+			if (stdoutBuffer.trim()) stream.push(stdoutBuffer);
+			stream.end();
+		})
+		.catch((err: unknown) => {
+			stream.destroy(err instanceof Error ? err : new Error(String(err)));
+		});
+
+	try {
+		for await (const line of stream) {
+			const lineStr = String(line).trim();
+			if (!lineStr) continue;
+
+			try {
+				const event = JSON.parse(lineStr) as SandcasterEvent;
+				yield event;
+			} catch {
+				yield {
+					type: "warning",
+					content: `Failed to parse event line: ${lineStr.slice(0, 200)}`,
+				} satisfies SandcasterEvent;
+			}
+		}
+	} catch (streamErr) {
+		const errMsg =
+			streamErr instanceof Error ? streamErr.message : String(streamErr);
+		const detail = _stderrBuffer.trim()
+			? `${errMsg}\nstderr: ${_stderrBuffer.trim()}`
+			: errMsg;
+		yield {
+			type: "error",
+			content: redactApiKeys(`Runner error: ${detail}`, envs),
+			code: "RUNNER_ERROR",
+		} satisfies SandcasterEvent;
+	}
+
+	await runPromise.catch(() => {});
+
+	// Extract generated files
+	const inputFileNames = new Set(Object.keys(request.files ?? {}));
+	const fileEvents = await extractGeneratedFiles(
+		instance,
+		inputFileNames,
+		"",
+		markerPath ?? "",
+	);
+
+	for (const fileEvent of fileEvents) {
+		yield fileEvent as SandcasterEvent;
+	}
+}
+
+// ---------------------------------------------------------------------------
 // handleCompositeRequest — dispatch IPC action to the pool
 // ---------------------------------------------------------------------------
 

@@ -17,7 +17,7 @@ import type {
 import {
 	loadConfig as coreLoadConfig,
 	getSandboxProvider,
-	runAgentInSandbox,
+	runAgentOnInstance,
 	SessionManager,
 } from "@sandcaster/core";
 import { defineCommand } from "citty";
@@ -187,7 +187,7 @@ const prodDeps: ChatDeps = {
 	createSessionManager: (opts: SessionManagerOptions) =>
 		new SessionManager(opts),
 	sandboxFactory: prodSandboxFactory,
-	runAgent: runAgentInSandbox,
+	runAgent: runAgentOnInstance,
 	stdout: process.stdout,
 	exit: (code: number) => process.exit(code),
 };

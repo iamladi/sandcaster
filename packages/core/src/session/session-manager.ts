@@ -560,6 +560,9 @@ export class SessionManager {
 		} finally {
 			mutex.release();
 		}
+
+		// Notify external listeners after releasing the mutex to avoid deadlock
+		this.opts.onSessionExpired?.(sessionId);
 	}
 
 	/**
