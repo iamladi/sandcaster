@@ -140,12 +140,27 @@
     closeBtn?.focus();
   }
 
+  let focusableCache: HTMLElement[] | null = null;
+
   function closeMenu() {
+    if (overlay?.classList.contains("hidden")) return;
     overlay?.classList.add("hidden");
     overlay?.classList.remove("flex");
     trigger?.setAttribute("aria-expanded", "false");
     document.body.style.overflow = "";
+    focusableCache = null;
     trigger?.focus();
+  }
+
+  function getFocusable(): HTMLElement[] {
+    if (!focusableCache && overlay) {
+      focusableCache = Array.from(
+        overlay.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    }
+    return focusableCache ?? [];
   }
 
   trigger?.addEventListener("click", openMenu);
@@ -162,9 +177,7 @@
   overlay?.addEventListener("keydown", (e) => {
     if (e.key !== "Tab") return;
 
-    const focusable = overlay.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
+    const focusable = getFocusable();
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
 

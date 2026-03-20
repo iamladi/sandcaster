@@ -1,26 +1,15 @@
 ---
+import Badge from "./Badge.astro";
 
+const labels = [
+  "General Assistant",
+  "Research Briefs",
+  "Support Triage",
+  "API Extraction",
+  "Security Audits",
+];
 ---
 
 <div class="flex gap-2 flex-wrap">
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full border border-border-subtle text-xs text-text-secondary"
-    >General Assistant</span
-  >
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full border border-border-subtle text-xs text-text-secondary"
-    >Research Briefs</span
-  >
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full border border-border-subtle text-xs text-text-secondary"
-    >Support Triage</span
-  >
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full border border-border-subtle text-xs text-text-secondary"
-    >API Extraction</span
-  >
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full border border-border-subtle text-xs text-text-secondary"
-    >Security Audits</span
-  >
+  {labels.map((label) => <Badge>{label}</Badge>)}
 </div>
