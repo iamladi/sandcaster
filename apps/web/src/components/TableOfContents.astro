@@ -7,7 +7,9 @@ const { headings } = Astro.props;
 const filtered = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
-<aside class="w-48 shrink-0 hidden xl:block sticky top-20 self-start">
+<aside
+  class="w-48 shrink-0 hidden xl:block sticky top-20 self-start overflow-y-auto max-h-[calc(100vh-5rem)]"
+>
   {
     filtered.length > 0 && (
       <div>
