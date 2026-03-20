@@ -1,0 +1,143 @@
+---
+title: "Starters"
+description: "Pre-built project templates for common AI agent use cases."
+order: 6
+section: "Guides"
+---
+
+## What Are Starters?
+
+Starters are runnable project templates that give you a working Sandcaster agent configured for a specific use case. Instead of writing a system prompt from scratch, you pick a starter and get a ready-to-run project in seconds.
+
+Each starter scaffolds:
+
+- **`sandcaster.json`** — pre-configured model, tools, and system prompt tuned for the use case
+- **`README.md`** — usage notes and example prompts specific to this starter
+- **`.env.example`** — the API keys this starter needs
+- **Starter-specific assets** — skill files, sub-agent configs, or example inputs as appropriate
+
+## Available Starters
+
+| Name | Description | Aliases |
+|------|-------------|---------|
+| `general-assistant` | Flexible agent for mixed workflows — research, writing, analysis, coding | — |
+| `research-brief` | Research a topic, compare options, or support a decision with sourced analysis | `competitive-analysis` |
+| `document-analyst` | Review transcripts, reports, and PDFs — extract insights, summarize, flag issues | — |
+| `support-triage` | Categorize, prioritize, and draft responses for support tickets or bug reports | `issue-triage` |
+| `api-extractor` | Crawl API documentation and draft an OpenAPI specification | `docs-to-openapi` |
+| `security-audit` | Structured security review using orchestrated sub-agents | — |
+
+## Using a Starter
+
+```bash
+sandcaster init <starter>
+sandcaster init <starter> <directory>
+```
+
+List all available starters:
+
+```bash
+sandcaster init --list
+```
+
+---
+
+## general-assistant
+
+A flexible, general-purpose agent with no strong opinion about task shape. Good for exploratory work, mixed workflows, and tasks that don't fit a more specialized template.
+
+```bash
+sandcaster init general-assistant
+cd general-assistant
+sandcaster "Draft a go-to-market strategy for a developer tool"
+```
+
+---
+
+## research-brief
+
+Configured for structured research tasks: compare options, gather evidence, and produce a decision-ready brief. The system prompt emphasizes sourcing, balanced comparison, and a clear recommendation.
+
+Aliases: `competitive-analysis`
+
+```bash
+sandcaster init research-brief
+cd research-brief
+sandcaster "Compare Stripe, Paddle, and Lemon Squeezy for a bootstrapped B2B SaaS"
+```
+
+**Typical output:** A markdown document with a comparison table, per-option analysis, and a final recommendation with rationale.
+
+---
+
+## document-analyst
+
+Built for reading and extracting insights from uploaded documents — meeting transcripts, customer interviews, annual reports, compliance documents, or PDFs.
+
+```bash
+sandcaster init document-analyst
+cd document-analyst
+sandcaster "Summarize the key decisions and open questions" -f board-meeting.txt
+sandcaster "Extract all action items and assign owners" -f transcript.pdf
+```
+
+**Typical output:** Structured summary with extracted entities, themes, action items, or risk flags depending on the prompt.
+
+---
+
+## support-triage
+
+Processes support tickets, GitHub issues, or bug reports. Categorizes by type and severity, identifies duplicates, and drafts a triage response or escalation note.
+
+Aliases: `issue-triage`
+
+```bash
+sandcaster init support-triage
+cd support-triage
+sandcaster "Triage these tickets and flag anything P0" -f tickets.json
+```
+
+**Typical output:** A triage report with severity classification, suggested assignees, and draft responses for each ticket.
+
+---
+
+## api-extractor
+
+Crawls API documentation pages and produces a draft OpenAPI specification. Useful for documenting undocumented APIs, migrating from legacy docs, or generating client SDKs.
+
+Aliases: `docs-to-openapi`
+
+```bash
+sandcaster init api-extractor
+cd api-extractor
+sandcaster "Extract the OpenAPI spec from https://example.com/api/docs"
+```
+
+**Typical output:** A `openapi.yaml` file with endpoints, parameters, request/response schemas, and authentication info filled in from the docs.
+
+---
+
+## security-audit
+
+A multi-agent starter that runs a structured security review. Spawns specialized sub-agents for different audit dimensions (authentication, authorization, input validation, dependency analysis) and aggregates findings into a final report.
+
+```bash
+sandcaster init security-audit my-audit
+cd my-audit
+sandcaster "Audit the API layer in ./src/api for security issues"
+```
+
+**Typical output:** A structured security report with findings grouped by severity (critical, high, medium, low), each with a description, reproduction steps, and remediation suggestion.
+
+---
+
+## Creating Custom Starters
+
+The starter system is designed for community contribution. If you've built a useful configuration, consider contributing it back:
+
+1. Fork the repository
+2. Add your starter under `packages/core/src/starters/`
+3. Include `sandcaster.json`, `README.md`, `.env.example`, and any supporting files
+4. Open a pull request with a description of the use case
+
+Custom starters follow the same conventions as built-in ones and can include skills, sub-agent definitions, structured output schemas, and example prompts.

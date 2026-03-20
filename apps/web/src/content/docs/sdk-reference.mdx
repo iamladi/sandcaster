@@ -1,0 +1,153 @@
+---
+title: "SDK Reference"
+description: "TypeScript client SDK for programmatic access to Sandcaster agents."
+order: 4
+section: "Reference"
+---
+
+## Installation
+
+```bash
+bun add @sandcaster/sdk
+```
+
+Also works with npm and yarn:
+
+```bash
+npm install @sandcaster/sdk
+yarn add @sandcaster/sdk
+```
+
+## Quick Start
+
+```typescript
+import { SandcasterClient } from "@sandcaster/sdk";
+
+const client = new SandcasterClient({
+	baseUrl: "http://localhost:8000",
+	apiKey: "your-token",
+});
+
+for await (const event of client.query({ prompt: "Analyze this market" })) {
+	if (event.type === "assistant") console.log(event.content);
+	if (event.type === "file") console.log(`artifact: ${event.path}`);
+	if (event.type === "result") console.log(`cost: $${event.costUsd}`);
+}
+```
+
+## SandcasterClient
+
+### Constructor Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `baseUrl` | `string` | Yes | Base URL of the Sandcaster API server |
+| `apiKey` | `string` | No | Bearer token for authentication (if server requires it) |
+
+```typescript
+const client = new SandcasterClient({
+	baseUrl: "https://agents.example.com",
+	apiKey: process.env.SANDCASTER_API_KEY,
+});
+```
+
+## client.query()
+
+Sends a prompt to the agent and returns an async iterable of SSE events.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | `string` | Yes | The user prompt to send to the agent |
+| `model` | `string` | No | Model alias or full ID |
+| `maxTurns` | `integer` | No | Max conversation turns |
+| `timeout` | `integer` | No | Sandbox lifetime in seconds |
+| `files` | `object[]` | No | Files to upload: `[{ name, content }]` where content is a `Uint8Array` or base64 string |
+| `outputFormat` | `object` | No | JSON Schema for structured output |
+| `allowedTools` | `string[]` | No | Tool whitelist for this run |
+| `composite` | `object` | No | Multi-sandbox settings |
+| `signal` | `AbortSignal` | No | Signal to cancel the request mid-stream |
+
+## Event Types
+
+Events yielded by `client.query()` match the SSE events from the API:
+
+| Event type | Properties | Description |
+|------------|------------|-------------|
+| `system` | `message: string` | Server lifecycle messages |
+| `assistant` | `content: string` | A chunk of the agent's text response |
+| `user` | `content: string` | User-turn message (multi-turn runs) |
+| `file` | `path: string`, `mimeType: string` | File artifact produced by the agent |
+| `result` | `content: string`, `costUsd: number`, `inputTokens: number`, `outputTokens: number` | Final result with usage stats |
+| `warning` | `message: string` | Non-fatal issue |
+| `error` | `message: string`, `code: string` | Fatal error |
+
+## Cancellation with AbortSignal
+
+Pass an `AbortSignal` to cancel an in-flight query:
+
+```typescript
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 30_000); // cancel after 30s
+
+for await (const event of client.query({
+	prompt: "Run a deep analysis...",
+	signal: controller.signal,
+})) {
+	if (event.type === "assistant") process.stdout.write(event.content);
+}
+```
+
+When aborted, the async iterable stops yielding events and the sandbox is terminated server-side.
+
+## Symbol.asyncDispose
+
+`SandcasterClient` implements `Symbol.asyncDispose` for use with the `await using` syntax (TypeScript 5.2+):
+
+```typescript
+await using client = new SandcasterClient({ baseUrl: "http://localhost:8000" });
+
+for await (const event of client.query({ prompt: "Summarize this" })) {
+	console.log(event);
+}
+// client is disposed automatically here
+```
+
+## Error Handling
+
+Errors thrown by `client.query()` include both network errors and agent-level errors from the `error` event type:
+
+```typescript
+try {
+	for await (const event of client.query({ prompt: "Do the thing" })) {
+		if (event.type === "error") {
+			console.error(`Agent error: ${event.message} (${event.code})`);
+			break;
+		}
+		if (event.type === "result") {
+			console.log(event.content);
+		}
+	}
+} catch (err) {
+	// Network error, auth failure, or server-side exception
+	console.error("Request failed:", err);
+}
+```
+
+## Collecting the Full Response
+
+If you want the complete text response rather than streaming chunks:
+
+```typescript
+let fullResponse = "";
+
+for await (const event of client.query({ prompt: "Write a brief" })) {
+	if (event.type === "assistant") fullResponse += event.content;
+	if (event.type === "result") {
+		console.log(fullResponse);
+		console.log(`Total cost: $${event.costUsd}`);
+	}
+}
+```

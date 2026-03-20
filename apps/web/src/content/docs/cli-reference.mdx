@@ -1,0 +1,154 @@
+---
+title: "CLI Reference"
+description: "Command-line interface for initializing projects, running agents, and managing servers."
+order: 5
+section: "Reference"
+---
+
+## Installation
+
+The CLI lives in `apps/cli`. After building the monorepo, link it globally so the `sandcaster` command is available anywhere in your shell:
+
+```bash
+cd apps/cli && bun link
+```
+
+Verify the installation:
+
+```bash
+sandcaster --version
+```
+
+## Core Commands
+
+### sandcaster init
+
+Scaffold a new Sandcaster project from a starter template.
+
+```bash
+sandcaster init [starter] [directory]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `starter` | Starter template name (optional — interactive picker if omitted) |
+| `directory` | Target directory (optional — defaults to the starter name) |
+
+**Examples**
+
+```bash
+sandcaster init                          # Interactive starter picker
+sandcaster init --list                   # Print available starters and exit
+sandcaster init general-assistant        # Scaffold in ./general-assistant/
+sandcaster init research-brief my-brief  # Scaffold in ./my-brief/
+sandcaster init security-audit --force   # Overwrite existing directory
+```
+
+### sandcaster "prompt"
+
+Run a one-off agent query. This is the primary command — pass your prompt as a quoted string.
+
+```bash
+sandcaster "your prompt here"
+```
+
+This is an alias for `sandcaster query "your prompt here"`. Both forms are equivalent.
+
+**Examples**
+
+```bash
+sandcaster "Summarize the Q4 results"
+sandcaster "Write a pitch for our API product" --model opus
+sandcaster "Analyze this dataset" -f data.csv
+sandcaster "Review these two transcripts" -f call1.txt -f call2.txt
+```
+
+### sandcaster serve
+
+Start the Sandcaster REST API server.
+
+```bash
+sandcaster serve [options]
+```
+
+**Examples**
+
+```bash
+sandcaster serve                        # Start on default port 3000
+sandcaster serve --port 8000            # Start on port 8000
+sandcaster serve --host 0.0.0.0 --port 8000  # Bind to all interfaces
+```
+
+## Flags
+
+### Common Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--model <alias>` | - | Override the model for this run (alias or full ID) |
+| `--file <path>` | `-f` | Attach a file to the query (repeatable) |
+| `--timeout <seconds>` | - | Override sandbox lifetime |
+| `--help` | `-h` | Print help for the current command |
+| `--version` | - | Print the CLI version |
+
+### Init Flags
+
+| Flag | Description |
+|------|-------------|
+| `--list` | Print all available starters and exit |
+| `--force` | Overwrite the target directory if it already exists |
+
+### Serve Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port <number>` | `3000` | Port to listen on |
+| `--host <address>` | `127.0.0.1` | Host to bind to |
+
+## TUI
+
+The CLI uses Ink (React for terminals) to render a live terminal UI while an agent is running. You'll see:
+
+- **Status indicator** — current phase (creating sandbox, running, streaming, done)
+- **Token stream** — assistant response text printed in real time as it arrives
+- **Tool call display** — each tool call the agent makes, with its name and arguments
+- **Cost summary** — total cost and token usage when the run completes
+
+The TUI gracefully degrades to plain text output when stdout is not a TTY (e.g., in CI or when piping output).
+
+## Environment Variables
+
+Set these in your shell or `.env` file. `sandcaster init` generates a `.env.example` with placeholders.
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | API key for Anthropic models |
+| `OPENAI_API_KEY` | API key for OpenAI models |
+| `GOOGLE_API_KEY` | API key for Google models |
+| `OPENROUTER_API_KEY` | API key for OpenRouter |
+| `E2B_API_KEY` | API key for E2B cloud sandboxes |
+| `SANDCASTER_API_KEY` | Bearer token for the Sandcaster API server (if auth is enabled) |
+
+## Usage Examples
+
+```bash
+# Scaffold a research project and run a query
+sandcaster init research-brief competitor-analysis
+cd competitor-analysis
+sandcaster "Compare Stripe, Paddle, and Lemon Squeezy for a B2B SaaS"
+
+# Use the most capable model for a complex task
+sandcaster "Audit our API surface and identify breaking changes" --model opus
+
+# Attach multiple files
+sandcaster "Summarize the key decisions from these calls" \
+  -f meeting-jan.txt \
+  -f meeting-feb.txt \
+  -f meeting-mar.txt
+
+# Start the API server and query it with curl
+sandcaster serve --port 8000 &
+curl -N -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Quick summary of the market"}'
+```

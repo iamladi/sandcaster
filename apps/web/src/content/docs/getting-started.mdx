@@ -1,0 +1,104 @@
+---
+title: "Getting Started"
+description: "Install Sandcaster and run your first AI agent in under a minute."
+order: 1
+section: "Getting Started"
+---
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Bun 1.2+** — the JavaScript runtime Sandcaster is built on
+- **An LLM API key** — at least one of: Anthropic, OpenAI, Google, or OpenRouter
+- **A sandbox API key** — E2B for cloud sandboxes, or Docker running locally for self-hosted
+
+## Quick Start
+
+Clone the repository, install dependencies, and link the CLI globally:
+
+```bash
+git clone https://github.com/iamladi/sandcaster.git
+cd sandcaster
+bun install && bunx turbo build
+cd apps/cli && bun link
+```
+
+Once `sandcaster` is available in your shell, scaffold your first project and run a query:
+
+```bash
+sandcaster init general-assistant
+cd general-assistant
+sandcaster "Compare Notion, Coda, and Slite for async product teams"
+```
+
+Sandcaster streams events as the agent works. When it finishes you'll see the result and total cost.
+
+## The `sandcaster init` Flow
+
+`sandcaster init` scaffolds a ready-to-run project directory from a starter template. It creates:
+
+- `sandcaster.json` — project configuration
+- `README.md` — starter-specific usage notes
+- `.env.example` — required environment variables
+- Any starter-specific assets (skill files, sub-agent configs, etc.)
+
+It also reads API keys from your current environment and writes a `.env` file automatically, so you don't have to copy them by hand.
+
+### Init Commands
+
+| Command | What it does |
+|---------|-------------|
+| `sandcaster init` | Interactive prompt to pick a starter |
+| `sandcaster init --list` | Print available starters and exit |
+| `sandcaster init research-brief` | Scaffold the `research-brief` starter in `./research-brief/` |
+| `sandcaster init security-audit my-audit` | Scaffold `security-audit` into `./my-audit/` |
+
+## Running Queries
+
+From inside a scaffolded project directory, pass your prompt as a quoted argument:
+
+```bash
+sandcaster "Compare Notion, Coda, and Slite for async product teams"
+```
+
+Override the model for a single run:
+
+```bash
+sandcaster "Draft a competitive analysis" --model opus
+```
+
+Available model aliases: `sonnet`, `opus`, `haiku`, `gpt5`, `gpt5mini`, `gemini`. Full model IDs also work.
+
+## Uploading Files
+
+Attach one or more files to your query with `-f`:
+
+```bash
+sandcaster "Analyze this dataset and summarize key trends" -f data.csv
+sandcaster "Review these transcripts" -f transcript1.txt -f transcript2.txt
+```
+
+Files are uploaded to the sandbox before the agent runs. The agent can read and reference them throughout its work.
+
+## Starting the API Server
+
+To expose Sandcaster as an HTTP service (for the SDK, webhooks, or your own integrations):
+
+```bash
+sandcaster serve --port 8000
+```
+
+The server starts a Hono-based REST API with streaming SSE support. See the [API Reference](/docs/api-reference) for endpoint details.
+
+## How It Works
+
+Each query follows the same lifecycle:
+
+1. **Create sandbox** — provision an isolated execution environment (E2B, Docker, etc.)
+2. **Upload config and prompt** — copy `sandcaster.json`, the prompt, and any attached files into the sandbox
+3. **Run agent** — execute the agent loop inside the sandbox with full LLM access and tool use
+4. **Stream events** — forward SSE events (assistant messages, tool calls, file artifacts) back to your terminal or client in real time
+5. **Destroy sandbox** — tear down the environment after the run completes or times out
+
+This stateless, per-run isolation means every query gets a clean environment with no state leaking between runs.

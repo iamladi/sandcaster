@@ -1,0 +1,153 @@
+---
+title: "API Reference"
+description: "REST API endpoints for running agents, streaming results, and checking status."
+order: 3
+section: "Reference"
+---
+
+## Starting the Server
+
+```bash
+sandcaster serve --port 8000
+```
+
+The server runs a Hono-based HTTP service. By default it listens on port `3000`. Use `--host 0.0.0.0` to bind to all interfaces in production.
+
+## Authentication
+
+Authentication is optional. Set the `SANDCASTER_API_KEY` environment variable to enable Bearer token auth:
+
+```bash
+SANDCASTER_API_KEY=my-secret-token sandcaster serve
+```
+
+When set, all API requests must include:
+
+```
+Authorization: Bearer my-secret-token
+```
+
+If the env var is not set, the server accepts all requests without checking credentials.
+
+---
+
+## GET /health
+
+Returns the server status and version. Use this for load balancer health checks and uptime monitoring.
+
+**Response**
+
+```json
+{
+	"status": "ok",
+	"version": "0.1.0"
+}
+```
+
+---
+
+## POST /query
+
+Run an agent and stream results as Server-Sent Events (SSE).
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `prompt` | `string` | Yes | The user prompt to send to the agent |
+| `model` | `string` | No | Model alias or full ID, overrides `sandcaster.json` |
+| `maxTurns` | `integer` | No | Max conversation turns for this run |
+| `timeout` | `integer` | No | Sandbox lifetime in seconds |
+| `files` | `object[]` | No | Files to upload: `[{ name, content (base64) }]` |
+| `outputFormat` | `object` | No | JSON Schema for structured output |
+| `allowedTools` | `string[]` | No | Tool whitelist for this run |
+| `composite` | `object` | No | Multi-sandbox settings (see [Configuration](/docs/configuration)) |
+| `provider` | `string` | No | LLM provider override |
+| `sandboxProvider` | `string` | No | Sandbox backend override |
+
+### SSE Event Types
+
+The response is a stream of `text/event-stream` events. Each event has a `type` field:
+
+| Event type | Description |
+|------------|-------------|
+| `system` | Server lifecycle messages (sandbox created, agent started, etc.) |
+| `assistant` | A chunk of the agent's text response |
+| `user` | A user-turn message echoed back (rare, used in multi-turn runs) |
+| `result` | Final result with cost, token usage, and structured output if requested |
+| `warning` | Non-fatal issues (tool call rejected, soft limit approached) |
+| `error` | Fatal error that terminated the run |
+
+### Example Request
+
+```bash
+curl -N -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer my-secret-token" \
+  -d '{
+    "prompt": "Compare Notion, Coda, and Slite for async product teams",
+    "model": "sonnet",
+    "maxTurns": 30
+  }'
+```
+
+### Example SSE Response
+
+```
+event: system
+data: {"type":"system","message":"Sandbox created","sandboxId":"abc123"}
+
+event: assistant
+data: {"type":"assistant","content":"Let me research these tools..."}
+
+event: assistant
+data: {"type":"assistant","content":" starting with Notion."}
+
+event: result
+data: {"type":"result","content":"...full response...","costUsd":0.0042,"inputTokens":1204,"outputTokens":876}
+```
+
+---
+
+## GET /runs
+
+List recent agent runs. Useful for audit logs and run history.
+
+### Query Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | `integer` | `20` | Maximum number of runs to return |
+
+### Example Request
+
+```bash
+curl http://localhost:8000/runs?limit=5 \
+  -H "Authorization: Bearer my-secret-token"
+```
+
+### Response
+
+```json
+[
+	{
+		"id": "run_abc123",
+		"prompt": "Compare Notion, Coda, and Slite",
+		"model": "claude-sonnet-4-6",
+		"status": "completed",
+		"costUsd": 0.0042,
+		"inputTokens": 1204,
+		"outputTokens": 876,
+		"startedAt": "2026-03-20T14:22:10Z",
+		"completedAt": "2026-03-20T14:22:38Z"
+	}
+]
+```
+
+---
+
+## POST /webhooks/e2b
+
+Receives lifecycle events from E2B for sandbox monitoring. This endpoint is called by E2B infrastructure — you do not need to call it directly.
+
+Register the URL with E2B as a webhook target if you want Sandcaster to react to sandbox events (e.g., unexpected termination, quota warnings).

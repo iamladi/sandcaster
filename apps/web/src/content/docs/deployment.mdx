@@ -1,0 +1,171 @@
+---
+title: "Deployment"
+description: "Deploy Sandcaster agents to production with Docker, cloud providers, or serverless."
+order: 7
+section: "Guides"
+---
+
+## Architecture
+
+Sandcaster's execution model is stateless by design. Each `/query` request:
+
+1. Creates a fresh sandbox
+2. Runs the agent inside that sandbox
+3. Streams events back to the caller
+4. Destroys the sandbox when done
+
+No state is shared between requests. This makes horizontal scaling trivial — every instance of the server is identical and any request can be routed to any instance.
+
+The server itself is lightweight. It proxies work to sandbox providers (E2B, Docker, etc.) and does minimal CPU or memory work locally. You can run many concurrent agents on modest hardware.
+
+## Starting the Server
+
+For production, bind to all interfaces and set an explicit port:
+
+```bash
+sandcaster serve --host 0.0.0.0 --port 8000
+```
+
+## Docker Deployment
+
+### Dockerfile
+
+```dockerfile
+FROM oven/bun:1.2-alpine AS base
+WORKDIR /app
+
+# Install dependencies
+COPY package.json bun.lockb ./
+COPY packages/core/package.json ./packages/core/
+COPY apps/api/package.json ./apps/api/
+RUN bun install --frozen-lockfile
+
+# Build
+COPY . .
+RUN bunx turbo build --filter=@sandcaster/api
+
+# Run
+FROM oven/bun:1.2-alpine
+WORKDIR /app
+COPY --from=base /app/apps/api/dist ./dist
+COPY --from=base /app/node_modules ./node_modules
+
+EXPOSE 8000
+CMD ["bun", "run", "dist/index.js"]
+```
+
+### docker-compose.yml
+
+```yaml
+services:
+  sandcaster:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - E2B_API_KEY=${E2B_API_KEY}
+      - SANDCASTER_API_KEY=${SANDCASTER_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+```
+
+Start the stack:
+
+```bash
+docker compose up -d
+```
+
+## Concurrent Agents
+
+Each query gets its own independent sandbox — there is no shared state between concurrent requests. You can run as many queries in parallel as your sandbox provider quota allows.
+
+To increase throughput:
+
+- Raise E2B's concurrent sandbox limit in your account settings
+- For Docker-based sandboxes, ensure the host has enough CPU and memory for concurrent containers
+- For composite workflows, configure `maxSandboxes` in `sandcaster.json` to control per-request parallelism
+
+## Horizontal Scaling
+
+Because the server is stateless, you can run multiple instances behind a load balancer without any coordination layer:
+
+- Each instance is identical
+- Sessions are not pinned — any instance can handle any request
+- The SSE stream is held open for the duration of a query, so ensure your load balancer supports long-lived HTTP connections (disable request timeouts or set them to your max agent timeout)
+
+## Environment Variables
+
+Required in production:
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Required if using Anthropic models |
+| `OPENAI_API_KEY` | Required if using OpenAI models |
+| `GOOGLE_API_KEY` | Required if using Google models |
+| `OPENROUTER_API_KEY` | Required if using OpenRouter |
+| `E2B_API_KEY` | Required if using E2B sandboxes |
+| `SANDCASTER_API_KEY` | Set to enable Bearer token authentication |
+
+## Sandbox Provider Considerations
+
+### E2B (recommended for cloud)
+
+E2B provides managed, fast-starting sandboxes with no infrastructure to operate. Best choice for production cloud deployments.
+
+- Set `E2B_API_KEY` in your environment
+- Monitor quota usage in the E2B dashboard
+- Register the E2B webhook URL (`/webhooks/e2b`) for sandbox lifecycle events
+
+### Docker (recommended for self-hosted)
+
+Docker runs sandboxes as containers on the same host as the server. Good for on-premise deployments where data must not leave your infrastructure.
+
+- Docker must be installed and the socket must be accessible
+- Size the host appropriately for your expected concurrency
+- Sandboxes are torn down after each run — no persistent container state
+
+## Security
+
+### API Authentication
+
+Enable Bearer token auth by setting `SANDCASTER_API_KEY`. All clients (SDK, curl, etc.) must include the token in the `Authorization` header. Without this variable set, the server accepts all requests.
+
+### Sandbox Isolation
+
+Every agent run executes in an isolated sandbox with:
+
+- Its own filesystem (no access to the host or other sandboxes)
+- No persistent state between runs
+- Resource limits enforced by the sandbox provider (CPU, memory, network)
+
+### Network Exposure
+
+In production, place the server behind a reverse proxy (nginx, Caddy, Cloudflare Tunnel) rather than exposing it directly to the internet. This lets you terminate TLS, apply rate limiting, and restrict access at the network edge.
+
+## Monitoring
+
+### Health Check
+
+```bash
+curl http://localhost:8000/health
+```
+
+Returns `{"status":"ok","version":"..."}`. Use this as a liveness probe in Kubernetes or a health check target in your load balancer.
+
+### Run History
+
+```bash
+curl http://localhost:8000/runs?limit=50 \
+  -H "Authorization: Bearer my-secret-token"
+```
+
+Returns recent run metadata including status, cost, token usage, and timestamps. Useful for dashboards and debugging.
+
+### Logging
+
+The server writes structured logs to stdout. Route stdout to your preferred log aggregator (Datadog, CloudWatch, Loki, etc.) for centralized monitoring.
