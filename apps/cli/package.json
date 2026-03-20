@@ -17,15 +17,7 @@
 		"cli"
 	],
 	"engines": {
-		"node": ">=18"
-	},
-	"main": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js"
-		}
+		"node": ">=20"
 	},
 	"files": [
 		"dist"
