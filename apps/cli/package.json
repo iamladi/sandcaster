@@ -20,7 +20,8 @@
 		"node": ">=20"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"README.md"
 	],
 	"bin": {
 		"sandcaster": "./dist/index.js"
