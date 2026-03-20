@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { defineCommand, runMain } from "citty";
+import { chatCommand } from "./commands/chat.js";
 import { initCommand } from "./commands/init.js";
 import { queryCommand } from "./commands/query.js";
 import { serveCommand } from "./commands/serve.js";
@@ -23,6 +24,7 @@ const knownSubcommands = new Set([
 	"init",
 	"templates",
 	"session",
+	"chat",
 ]);
 
 const main = defineCommand({
@@ -36,6 +38,7 @@ const main = defineCommand({
 		init: initCommand,
 		templates: templatesCommand,
 		session: sessionCommand,
+		chat: chatCommand,
 	},
 });
 
