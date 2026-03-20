@@ -26,7 +26,7 @@ import { defineCommand } from "citty";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ChatArgs = {};
+export type ChatArgs = Record<string, never>;
 
 export interface ChatDeps {
 	loadConfig: (dir?: string) => SandcasterConfig | null;

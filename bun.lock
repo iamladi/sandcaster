@@ -63,16 +63,6 @@
         "tsup": "^8.5.1",
       },
     },
-    "apps/slack-bot": {
-      "name": "@sandcaster/slack-bot",
-      "version": "0.0.0",
-      "dependencies": {
-        "@sandcaster/core": "workspace:*",
-      },
-      "devDependencies": {
-        "@sandcaster/ts-config": "workspace:*",
-      },
-    },
     "apps/web": {
       "name": "@sandcaster/web",
       "version": "0.0.0",
@@ -649,8 +639,6 @@
     "@sandcaster/core": ["@sandcaster/core@workspace:packages/core"],
 
     "@sandcaster/sdk": ["@sandcaster/sdk@workspace:packages/sdk"],
-
-    "@sandcaster/slack-bot": ["@sandcaster/slack-bot@workspace:apps/slack-bot"],
 
     "@sandcaster/ts-config": ["@sandcaster/ts-config@workspace:packages/ts-config"],
 

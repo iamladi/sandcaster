@@ -15,7 +15,7 @@ import type { ChatConfig } from "../config.js";
 // ---------------------------------------------------------------------------
 
 vi.mock("chat", () => {
-	// biome-ignore lint/style/useArrowFunction: must be regular function for `new` support
+	// biome-ignore lint: must be regular function for `new` support
 	const ChatMock = vi.fn(function ChatCtor(this: {
 		onNewMention: ReturnType<typeof vi.fn>;
 		onSubscribedMessage: ReturnType<typeof vi.fn>;
@@ -385,12 +385,24 @@ describe("createChatBot", () => {
 				{
 					id: "prev-1",
 					text: "first message",
-					author: { userId: "U1", fullName: "Alice", userName: "alice", isBot: false, isMe: false },
+					author: {
+						userId: "U1",
+						fullName: "Alice",
+						userName: "alice",
+						isBot: false,
+						isMe: false,
+					},
 				},
 				{
 					id: "prev-2",
 					text: "bot reply",
-					author: { userId: "B1", fullName: "Sandcaster", userName: "sandcaster", isBot: true, isMe: true },
+					author: {
+						userId: "B1",
+						fullName: "Sandcaster",
+						userName: "sandcaster",
+						isBot: true,
+						isMe: true,
+					},
 				},
 			];
 			const thread = createMockThread({
@@ -467,7 +479,13 @@ describe("createChatBot", () => {
 			const { mentionHandler } = getCapturedHandlers(Chat);
 			const thread = createMockThread();
 			const message = createMockMessage({
-				author: { userId: "U-BLOCKED", fullName: "Eve", userName: "eve", isBot: false, isMe: false },
+				author: {
+					userId: "U-BLOCKED",
+					fullName: "Eve",
+					userName: "eve",
+					isBot: false,
+					isMe: false,
+				},
 			});
 
 			await mentionHandler(thread, message);

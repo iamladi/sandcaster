@@ -9,7 +9,7 @@ import { SessionPool } from "../session-pool.js";
 // ---------------------------------------------------------------------------
 
 vi.mock("chat", () => {
-	// biome-ignore lint/style/useArrowFunction: must be regular function for `new` support
+	// biome-ignore lint: must be regular function for `new` support
 	const Chat = vi.fn(function ChatCtor(this: any) {
 		this.onNewMention = vi.fn((handler: any) => {
 			this._mentionHandler = handler;
@@ -227,7 +227,7 @@ describe("integration: full mention → session → stream → post flow", () =>
 		const sessionManager = createMockSessionManager();
 		const opts = { ...makeBaseConfig(), sessionManager };
 		createChatBot(opts as any);
-		const { subscribedHandler } = await getHandlers();
+		const { subscribedHandler: _subscribedHandler } = await getHandlers();
 
 		// Thread history to iterate
 		const historyMessages = [
