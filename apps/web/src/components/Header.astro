@@ -1,0 +1,65 @@
+---
+import MobileMenu from "./MobileMenu.astro";
+---
+
+<header
+  class="sticky top-0 z-50 border-b border-border-subtle backdrop-blur-lg bg-bg-base/80"
+>
+  <nav
+    class="max-w-[1200px] mx-auto px-8 h-16 flex items-center justify-between"
+  >
+    <!-- Logo -->
+    <a
+      href="/"
+      class="flex items-center gap-2 text-text-primary font-semibold shrink-0"
+    >
+      <svg
+        class="w-6 h-6 text-accent"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        ></path>
+      </svg>
+      Sandcaster
+    </a>
+
+    <!-- Desktop nav links -->
+    <div class="hidden md:flex items-center gap-6">
+      <a
+        href="/docs"
+        class="text-sm text-text-secondary hover:text-text-primary transition-colors"
+      >
+        Docs
+      </a>
+      <a
+        href="/blog"
+        class="text-sm text-text-secondary hover:text-text-primary transition-colors"
+      >
+        Blog
+      </a>
+      <a
+        href="/changelog"
+        class="text-sm text-text-secondary hover:text-text-primary transition-colors"
+      >
+        Changelog
+      </a>
+    </div>
+
+    <!-- Desktop CTA + Mobile hamburger -->
+    <div class="flex items-center gap-3">
+      <a
+        href="/docs/getting-started"
+        class="hidden md:inline-flex items-center justify-center px-5 py-2 rounded-full bg-text-primary text-bg-base text-sm font-medium hover:bg-zinc-200 transition-all"
+      >
+        Get Started
+      </a>
+      <MobileMenu />
+    </div>
+  </nav>
+</header>

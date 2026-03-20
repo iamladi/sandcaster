@@ -1,0 +1,28 @@
+---
+import "../assets/styles/global.css";
+import Head from "../components/Head.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+  canonicalUrl?: string;
+}
+
+const { title, description, canonicalUrl } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <Head title={title} description={description} canonicalUrl={canonicalUrl} />
+  </head>
+  <body
+    class="bg-bg-base text-text-primary font-sans antialiased min-h-screen flex flex-col"
+  >
+    <Header />
+    <slot />
+    <Footer />
+  </body>
+</html>
