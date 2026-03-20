@@ -1,0 +1,31 @@
+{
+	"name": "@sandcaster/web",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "astro dev",
+		"build": "astro build",
+		"preview": "astro preview",
+		"check-types": "astro check",
+		"lint": "biome check . && prettier --check 'src/**/*.astro'",
+		"test": "vitest run",
+		"pretest": "astro sync",
+		"format:astro": "prettier --write 'src/**/*.astro'"
+	},
+	"dependencies": {
+		"astro": "^5.9.4",
+		"@astrojs/mdx": "^4.3.0",
+		"@astrojs/sitemap": "^3.3.1",
+		"tailwindcss": "^4.1.10",
+		"@tailwindcss/vite": "^4.1.10",
+		"sharp": "^0.33.5"
+	},
+	"devDependencies": {
+		"@astrojs/check": "^0.9.8",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18",
+		"prettier": "^3.5.3",
+		"prettier-plugin-astro": "^0.14.1"
+	}
+}
