@@ -1,3 +1,8 @@
+[![CI](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue.svg)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.2+-f472b6.svg)](https://bun.sh/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 # Sandcaster
 
 Open-source runtime for general-purpose AI agents in isolated sandboxes.
@@ -5,11 +10,6 @@ Open-source runtime for general-purpose AI agents in isolated sandboxes.
 CLI, API, TypeScript SDK, and Slack with streaming, file uploads, and config-driven behavior.
 
 Built on [Pi-mono](https://github.com/badlogic/pi-mono) for multi-provider LLM orchestration and pluggable sandbox backends ([E2B](https://e2b.dev), [Vercel](https://vercel.com/docs/sandbox), Docker, [Cloudflare Containers](https://developers.cloudflare.com/containers/)).
-
-[![CI](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml/badge.svg)](https://github.com/iamladi/sandcaster/actions/workflows/ci.yml)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-blue.svg)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-1.2+-f472b6.svg)](https://bun.sh/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Sandcaster is a TypeScript rewrite of [Sandstorm](https://github.com/tomascupr/sandstorm) for people who want real agent work, not a chat wrapper:
 
