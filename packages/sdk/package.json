@@ -1,6 +1,6 @@
 {
 	"name": "@sandcaster/sdk",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"type": "module",
 	"license": "MIT",
 	"description": "TypeScript SDK for Sandcaster — run AI agents in isolated sandboxes",
