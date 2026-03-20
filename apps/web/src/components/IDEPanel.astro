@@ -1,0 +1,200 @@
+---
+---
+
+<div class="bg-bg-panel border border-border-subtle rounded-lg overflow-hidden shadow-2xl">
+	<!-- Menu bar -->
+	<div class="flex flex-row items-center px-4 py-3 border-b border-border-subtle text-xs text-text-secondary">
+		<!-- Logo -->
+		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="shrink-0">
+			<rect width="14" height="14" rx="3" fill="#d4ff00" />
+			<rect x="3" y="3" width="3.5" height="3.5" rx="1" fill="#09090b" />
+			<rect x="7.5" y="7.5" width="3.5" height="3.5" rx="1" fill="#09090b" />
+		</svg>
+		<!-- Center nav labels -->
+		<div class="flex gap-4 ml-4">
+			<span>File</span>
+			<span>Edit</span>
+			<span>Selection</span>
+			<span>Run</span>
+			<span>Terminal</span>
+		</div>
+		<!-- Right side -->
+		<div class="ml-auto flex items-center gap-2">
+			<span>main</span>
+			<div class="w-4 h-4 bg-border-hover rounded-full"></div>
+		</div>
+	</div>
+
+	<!-- Body -->
+	<div class="flex flex-row h-[400px]">
+		<!-- Sidebar -->
+		<div class="w-[200px] border-r border-border-subtle flex flex-row">
+			<!-- Icon column -->
+			<div class="w-12 border-r border-border-subtle flex flex-col items-center pt-3 gap-3">
+				<!-- File explorer (active) -->
+				<svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="text-text-primary">
+					<path d="M3 4a1 1 0 0 1 1-1h4l2 2h4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4Z" stroke="currentColor" stroke-width="1.5" fill="none" />
+				</svg>
+				<!-- Search -->
+				<svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="text-text-tertiary">
+					<circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.5" />
+					<path d="M14 14l-2.5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+				</svg>
+				<!-- Packages -->
+				<svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="text-text-tertiary">
+					<path d="M3 6l6-3 6 3v6l-6 3-6-3V6Z" stroke="currentColor" stroke-width="1.5" fill="none" />
+					<path d="M9 3v12M3 6l6 3 6-3" stroke="currentColor" stroke-width="1.5" />
+				</svg>
+			</div>
+
+			<!-- File tree -->
+			<div class="flex-1 pt-3 text-xs overflow-hidden">
+				<p class="uppercase text-[0.65rem] text-text-tertiary px-2 mb-2 tracking-wider">Workspace</p>
+				<!-- src folder -->
+				<div class="flex items-center gap-1 px-2 py-0.5 text-text-secondary">
+					<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+						<path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+					</svg>
+					<span>src</span>
+				</div>
+				<!-- agent.ts (active) -->
+				<div class="flex items-center gap-1 pl-6 pr-2 py-0.5 bg-white/5 text-text-primary">
+					<span>agent.ts</span>
+				</div>
+				<!-- tools.ts -->
+				<div class="flex items-center gap-1 pl-6 pr-2 py-0.5 text-text-secondary">
+					<span>tools.ts</span>
+				</div>
+				<!-- sandcaster.json -->
+				<div class="flex items-center gap-1 px-2 py-0.5 text-text-secondary">
+					<span>sandcaster.json</span>
+				</div>
+				<!-- .env -->
+				<div class="flex items-center gap-1 px-2 py-0.5 text-text-secondary">
+					<span>.env</span>
+				</div>
+			</div>
+		</div>
+
+		<!-- Editor area -->
+		<div class="flex-1 bg-bg-base flex flex-col relative overflow-hidden">
+			<!-- Tab bar -->
+			<div class="flex flex-row border-b border-border-subtle text-xs">
+				<div class="px-4 py-2 bg-bg-base text-text-primary border-r border-border-subtle border-t border-t-accent">
+					agent.ts
+				</div>
+				<div class="px-4 py-2 bg-bg-panel text-text-secondary border-r border-border-subtle">
+					sandcaster.json
+				</div>
+			</div>
+
+			<!-- Code content -->
+			<div class="flex-1 overflow-hidden pt-4 pb-4 font-mono text-xs leading-relaxed">
+				<table class="border-separate border-spacing-0 w-full">
+					<tbody>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4 w-8">1</td>
+							<td class="pr-4"><span class="text-syntax-keyword">import</span> <span class="text-text-primary">{"{ Sandcaster }"}</span> <span class="text-syntax-keyword">from</span> <span class="text-syntax-string">'sandcaster'</span><span class="text-text-primary">;</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4 w-8">2</td>
+							<td class="pr-4"><span class="text-syntax-keyword">import</span> <span class="text-text-primary">{"{ E2BSandbox }"}</span> <span class="text-syntax-keyword">from</span> <span class="text-syntax-string">'@sandcaster/e2b'</span><span class="text-text-primary">;</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">&nbsp;</td>
+							<td></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">4</td>
+							<td class="pr-4"><span class="text-syntax-keyword">const</span> <span class="text-syntax-variable">app</span> <span class="text-text-primary">=</span> <span class="text-syntax-keyword">new</span> <span class="text-syntax-function">Sandcaster</span><span class="text-text-primary">({"{"}</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">5</td>
+							<td class="pr-4"><span class="text-syntax-property">&nbsp;&nbsp;sandbox</span><span class="text-text-primary">:</span> <span class="text-syntax-keyword">new</span> <span class="text-syntax-function">E2BSandbox</span><span class="text-text-primary">(),</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">6</td>
+							<td class="pr-4"><span class="text-syntax-property">&nbsp;&nbsp;streaming</span><span class="text-text-primary">:</span> <span class="text-syntax-keyword">true</span><span class="text-text-primary">,</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">7</td>
+							<td class="pr-4"><span class="text-text-primary">{"});"}</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">&nbsp;</td>
+							<td></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">9</td>
+							<td class="pr-4"><span class="text-syntax-keyword">const</span> <span class="text-syntax-variable">agent</span> <span class="text-text-primary">=</span> <span class="text-syntax-variable">app</span><span class="text-text-primary">.</span><span class="text-syntax-function">createAgent</span><span class="text-text-primary">({"{"}</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">10</td>
+							<td class="pr-4"><span class="text-syntax-property">&nbsp;&nbsp;role</span><span class="text-text-primary">:</span> <span class="text-syntax-string">'System Administrator'</span><span class="text-text-primary">,</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">11</td>
+							<td class="pr-4"><span class="text-syntax-property">&nbsp;&nbsp;tools</span><span class="text-text-primary">: [</span><span class="text-syntax-comment">/* ... */</span><span class="text-text-primary">]</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">12</td>
+							<td class="pr-4"><span class="text-text-primary">});</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">&nbsp;</td>
+							<td></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">14</td>
+							<td class="pr-4"><span class="text-syntax-comment">// Await incoming stream</span></td>
+						</tr>
+						<tr>
+							<td class="text-text-tertiary select-none text-right pr-4 pl-4">15</td>
+							<td class="pr-4"><span class="text-syntax-keyword">await</span> <span class="text-syntax-variable">agent</span><span class="text-text-primary">.</span><span class="text-syntax-function">execute</span><span class="text-text-primary">(</span></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			<!-- Autocomplete popup -->
+			<div class="absolute bottom-10 left-[100px] bg-bg-panel-elevated border border-border-subtle rounded-md shadow-lg w-[300px] overflow-hidden">
+				<!-- execute method -->
+				<div class="flex items-center justify-between px-3 py-2 bg-white/5 gap-2">
+					<div class="flex items-center gap-2 min-w-0">
+						<!-- star icon -->
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="text-syntax-function shrink-0">
+							<path d="M6 1l1.3 3.9H11L8.2 7.1l1 3.9L6 8.8l-3.2 2.2 1-3.9L1 4.9h3.7L6 1Z" fill="currentColor" />
+						</svg>
+						<span class="text-xs text-text-primary truncate">Method</span>
+						<span class="text-xs text-text-secondary font-medium truncate">execute</span>
+					</div>
+					<span class="text-xs text-text-tertiary shrink-0">Promise&lt;Stream&gt;</span>
+				</div>
+				<!-- config property -->
+				<div class="flex items-center justify-between px-3 py-2 gap-2">
+					<div class="flex items-center gap-2 min-w-0">
+						<!-- shield icon -->
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="text-syntax-keyword shrink-0">
+							<path d="M6 1L1.5 3v3c0 2.5 2 4.5 4.5 5 2.5-.5 4.5-2.5 4.5-5V3L6 1Z" stroke="currentColor" stroke-width="1.2" fill="none" />
+						</svg>
+						<span class="text-xs text-text-primary truncate">Property</span>
+						<span class="text-xs text-text-secondary font-medium truncate">config</span>
+					</div>
+					<span class="text-xs text-text-tertiary shrink-0">AgentConfig</span>
+				</div>
+				<!-- state property -->
+				<div class="flex items-center justify-between px-3 py-2 gap-2">
+					<div class="flex items-center gap-2 min-w-0">
+						<!-- activity icon -->
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="text-syntax-property shrink-0">
+							<polyline points="1,6 3,2 5,9 7,4 9,7 11,6" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+						</svg>
+						<span class="text-xs text-text-primary truncate">Property</span>
+						<span class="text-xs text-text-secondary font-medium truncate">state</span>
+					</div>
+					<span class="text-xs text-text-tertiary shrink-0">StateTree</span>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
