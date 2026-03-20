@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getDocsNavigation } from "../src/lib/navigation";
 
 const EXPECTED_IDS = [

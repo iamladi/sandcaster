@@ -2,6 +2,12 @@
 	"$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
 	"extends": ["../../biome.json"],
 	"files": {
-		"ignore": ["dist/", ".astro/"]
+		"includes": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.json", "**/*.css"]
+	},
+	"css": {
+		"parser": {
+			"cssModules": false,
+			"tailwindDirectives": true
+		}
 	}
 }

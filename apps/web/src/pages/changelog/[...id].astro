@@ -3,17 +3,21 @@ import { getCollection, render } from "astro:content";
 import ChangelogLayout from "../../layouts/ChangelogLayout.astro";
 
 export async function getStaticPaths() {
-	const entries = await getCollection("changelog");
-	return entries.map((entry) => ({
-		params: { id: entry.id },
-		props: { entry },
-	}));
+  const entries = await getCollection("changelog");
+  return entries.map((entry) => ({
+    params: { id: entry.id },
+    props: { entry },
+  }));
 }
 
 const { entry } = Astro.props;
 const { Content } = await render(entry);
 ---
 
-<ChangelogLayout version={entry.data.version} date={entry.data.date} title={entry.data.title}>
-	<Content />
+<ChangelogLayout
+  version={entry.data.version}
+  date={entry.data.date}
+  title={entry.data.title}
+>
+  <Content />
 </ChangelogLayout>

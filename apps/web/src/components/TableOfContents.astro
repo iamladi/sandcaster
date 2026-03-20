@@ -1,34 +1,32 @@
 ---
 interface Props {
-	headings: { depth: number; slug: string; text: string }[];
+  headings: { depth: number; slug: string; text: string }[];
 }
 
 const { headings } = Astro.props;
 const filtered = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
-<aside
-	class="w-48 shrink-0 hidden xl:block sticky top-20 self-start"
->
-	{
-		filtered.length > 0 && (
-			<div>
-				<p class="text-xs uppercase text-text-tertiary tracking-wider mb-3">
-					On this page
-				</p>
-				<ul>
-					{filtered.map((heading) => (
-						<li>
-							<a
-								href={`#${heading.slug}`}
-								class={`block py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors ${heading.depth === 3 ? "pl-3" : ""}`}
-							>
-								{heading.text}
-							</a>
-						</li>
-					))}
-				</ul>
-			</div>
-		)
-	}
+<aside class="w-48 shrink-0 hidden xl:block sticky top-20 self-start">
+  {
+    filtered.length > 0 && (
+      <div>
+        <p class="text-xs uppercase text-text-tertiary tracking-wider mb-3">
+          On this page
+        </p>
+        <ul>
+          {filtered.map((heading) => (
+            <li>
+              <a
+                href={`#${heading.slug}`}
+                class={`block py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors ${heading.depth === 3 ? "pl-3" : ""}`}
+              >
+                {heading.text}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 </aside>
