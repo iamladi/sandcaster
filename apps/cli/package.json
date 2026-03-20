@@ -1,6 +1,6 @@
 {
 	"name": "@sandcaster/cli",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"license": "MIT",
 	"description": "CLI for Sandcaster — run AI agents in isolated sandboxes",
