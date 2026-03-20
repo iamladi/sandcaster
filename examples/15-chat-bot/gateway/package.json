@@ -1,0 +1,21 @@
+{
+	"name": "@sandcaster/example-chat-gateway",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./dist/index.js",
+	"scripts": {
+		"dev": "bun run src/index.ts",
+		"build": "tsc",
+		"start": "bun run dist/index.js"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.19.11",
+		"@sandcaster/chat": "workspace:*",
+		"@sandcaster/core": "workspace:*",
+		"hono": "^4.12.7"
+	},
+	"devDependencies": {
+		"@sandcaster/ts-config": "workspace:*"
+	}
+}
