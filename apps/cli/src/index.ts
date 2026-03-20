@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { existsSync, readFileSync } from "node:fs";
 import { defineCommand, runMain } from "citty";
 import { initCommand } from "./commands/init.js";
