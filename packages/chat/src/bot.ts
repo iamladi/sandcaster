@@ -125,9 +125,6 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 
 		const release = await pool.acquireMutex(threadKey);
 		try {
-			// Subscribe to thread for follow-up messages
-			await thread.subscribe();
-
 			// Create a new session
 			const { sessionId, events } = await sessionManager.createSession(
 				{ prompt: message.text },
@@ -136,6 +133,9 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 
 			// Register in pool
 			pool.register(threadKey, sessionId);
+
+			// Subscribe to thread for follow-up messages (after session creation succeeds)
+			await thread.subscribe();
 
 			// Stream response
 			await thread.post(eventToTextStream(events));
@@ -181,12 +181,14 @@ export function createChatBot(options: ChatBotOptions): ChatBotResult {
 				await thread.post(eventToTextStream(events));
 			} else {
 				// Re-engagement: session expired, rebuild context
+				// Exclude the current message to avoid duplication (it's appended separately)
 				const previousMessages: {
 					authorName: string;
 					text: string;
 					isBot: boolean;
 				}[] = [];
 				for await (const msg of thread.allMessages) {
+					if (msg.id === message.id) continue;
 					previousMessages.push({
 						authorName: msg.author.fullName,
 						text: msg.text,
