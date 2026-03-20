@@ -1,43 +1,71 @@
 {
 	"name": "@sandcaster/cli",
-	"version": "0.0.0",
-	"private": true,
+	"version": "0.1.0",
 	"type": "module",
-	"main": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js"
-		}
+	"license": "MIT",
+	"description": "CLI for Sandcaster — run AI agents in isolated sandboxes",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/iamladi/sandcaster.git",
+		"directory": "apps/cli"
+	},
+	"keywords": [
+		"sandcaster",
+		"ai",
+		"agent",
+		"sandbox",
+		"cli"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"files": [
+		"dist"
+	],
+	"bin": {
+		"sandcaster": "./dist/index.js"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "tsup && bun run postbuild",
+		"postbuild": "mkdir -p dist/runner && cp ../../packages/core/dist/runner/runner.mjs dist/runner/runner.mjs",
 		"check-types": "tsc --noEmit",
 		"lint": "biome check .",
 		"test": "vitest run",
 		"test:e2e": "vitest run --config vitest.e2e.config.ts"
 	},
-	"bin": {
-		"sandcaster": "./dist/index.js"
-	},
 	"dependencies": {
-		"@sandcaster/api": "workspace:*",
-		"@sandcaster/core": "workspace:*",
-		"@sandcaster/sdk": "workspace:*",
+		"@hono/node-server": "^1.19.11",
+		"@mariozechner/pi-agent-core": "^0.57.1",
+		"@mariozechner/pi-ai": "^0.57.1",
+		"@sinclair/typebox": "^0.34.48",
 		"citty": "^0.2.1",
+		"e2b": "^2.14.1",
+		"eventsource-parser": "^3.0.6",
+		"execa": "^9",
+		"hono": "^4.12.7",
 		"ink": "^6.8.0",
 		"marked": "15",
 		"marked-terminal": "7.3.0",
 		"react": "^19.2.4",
-		"wrap-ansi": "10"
+		"wrap-ansi": "10",
+		"yaml": "^2.8.2",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
+		"@sandcaster/api": "workspace:*",
+		"@sandcaster/core": "workspace:*",
+		"@sandcaster/sdk": "workspace:*",
 		"@sandcaster/ts-config": "workspace:*",
 		"@testing-library/react": "^16.3.2",
 		"@types/react": "^19.2.14",
 		"@vitest/browser": "^4.1.0",
 		"ink-testing-library": "^4.0.0",
-		"jsdom": "^28.1.0"
+		"jsdom": "^28.1.0",
+		"tsup": "^8.5.1"
 	}
 }

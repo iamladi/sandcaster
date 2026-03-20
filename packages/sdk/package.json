@@ -1,8 +1,24 @@
 {
 	"name": "@sandcaster/sdk",
-	"version": "0.0.0",
-	"private": true,
+	"version": "0.1.0",
 	"type": "module",
+	"license": "MIT",
+	"description": "TypeScript SDK for Sandcaster — run AI agents in isolated sandboxes",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/iamladi/sandcaster.git",
+		"directory": "packages/sdk"
+	},
+	"keywords": [
+		"sandcaster",
+		"ai",
+		"agent",
+		"sandbox",
+		"sdk"
+	],
+	"engines": {
+		"node": ">=18"
+	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
@@ -10,6 +26,15 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
 		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public",
+		"provenance": true,
+		"registry": "https://registry.npmjs.org/"
 	},
 	"scripts": {
 		"build": "tsc",

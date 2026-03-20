@@ -44,4 +44,6 @@ apps/slack-bot      — @sandcaster/slack-bot (Slack bot, depends on core)
 - Internal dependencies use `workspace:*`
 - Build output goes to `dist/`
 - Each package extends `@sandcaster/ts-config/node.json` (or `react.json` for CLI)
-- No npm publishing — private monorepo
+- SDK and CLI are published to npm; all other packages are private
+- Versioning via Changesets (`bunx changeset` to add a changeset)
+- CLI is bundled with tsup (workspace deps inlined, npm deps external)
