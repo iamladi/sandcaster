@@ -11,6 +11,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
+    environment: npm
     timeout-minutes: 15
     permissions:
       contents: write
