@@ -1,0 +1,15 @@
+---
+import Badge from "./Badge.astro";
+
+const labels = [
+  "General Assistant",
+  "Research Briefs",
+  "Support Triage",
+  "API Extraction",
+  "Security Audits",
+];
+---
+
+<div class="flex gap-2 flex-wrap">
+  {labels.map((label) => <Badge>{label}</Badge>)}
+</div>

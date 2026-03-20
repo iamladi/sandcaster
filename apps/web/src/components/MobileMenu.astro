@@ -1,0 +1,196 @@
+---
+
+---
+
+<!-- Hamburger trigger (visible on mobile only) -->
+<button
+  id="mobile-menu-trigger"
+  type="button"
+  class="md:hidden flex items-center justify-center p-2 text-text-secondary hover:text-text-primary transition-colors"
+  aria-label="Open menu"
+  aria-expanded="false"
+  aria-controls="mobile-menu-overlay"
+>
+  <svg
+    id="hamburger-icon"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    aria-hidden="true"
+  >
+    <line x1="2" y1="5" x2="18" y2="5"></line>
+    <line x1="2" y1="10" x2="18" y2="10"></line>
+    <line x1="2" y1="15" x2="18" y2="15"></line>
+  </svg>
+</button>
+
+<!-- Full-screen overlay -->
+<div
+  id="mobile-menu-overlay"
+  class="fixed inset-0 bg-bg-base z-50 hidden flex-col"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Navigation menu"
+>
+  <div
+    class="flex items-center justify-between px-6 h-16 border-b border-border-subtle"
+  >
+    <a href="/" class="flex items-center gap-2 text-text-primary font-semibold">
+      <svg
+        class="w-6 h-6 text-accent"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+        ></path>
+      </svg>
+      Sandcaster
+    </a>
+    <button
+      id="mobile-menu-close"
+      type="button"
+      class="flex items-center justify-center p-2 text-text-secondary hover:text-text-primary transition-colors"
+      aria-label="Close menu"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <line x1="3" y1="3" x2="17" y2="17"></line>
+        <line x1="17" y1="3" x2="3" y2="17"></line>
+      </svg>
+    </button>
+  </div>
+
+  <nav class="flex flex-col gap-1 px-4 py-6">
+    <a
+      href="/docs"
+      class="px-4 py-3 text-text-secondary hover:text-text-primary hover:bg-bg-panel rounded-lg transition-colors text-base font-medium"
+    >
+      Docs
+    </a>
+    <a
+      href="/blog"
+      class="px-4 py-3 text-text-secondary hover:text-text-primary hover:bg-bg-panel rounded-lg transition-colors text-base font-medium"
+    >
+      Blog
+    </a>
+    <a
+      href="/changelog"
+      class="px-4 py-3 text-text-secondary hover:text-text-primary hover:bg-bg-panel rounded-lg transition-colors text-base font-medium"
+    >
+      Changelog
+    </a>
+    <a
+      href="https://github.com/iamladi/sandcaster"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="px-4 py-3 text-text-secondary hover:text-text-primary hover:bg-bg-panel rounded-lg transition-colors text-base font-medium flex items-center gap-2"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"
+        ></path>
+      </svg>
+      GitHub
+    </a>
+  </nav>
+
+  <div class="px-4 mt-auto pb-8">
+    <a
+      href="/docs/getting-started"
+      class="flex items-center justify-center w-full px-5 py-3 rounded-full bg-text-primary text-bg-base text-sm font-medium hover:bg-zinc-200 transition-all"
+    >
+      Get Started
+    </a>
+  </div>
+</div>
+
+<script>
+  const trigger = document.getElementById("mobile-menu-trigger");
+  const overlay = document.getElementById("mobile-menu-overlay");
+  const closeBtn = document.getElementById("mobile-menu-close");
+
+  function openMenu() {
+    overlay?.classList.remove("hidden");
+    overlay?.classList.add("flex");
+    trigger?.setAttribute("aria-expanded", "true");
+    document.body.style.overflow = "hidden";
+    closeBtn?.focus();
+  }
+
+  let focusableCache: HTMLElement[] | null = null;
+
+  function closeMenu() {
+    if (overlay?.classList.contains("hidden")) return;
+    overlay?.classList.add("hidden");
+    overlay?.classList.remove("flex");
+    trigger?.setAttribute("aria-expanded", "false");
+    document.body.style.overflow = "";
+    focusableCache = null;
+    trigger?.focus();
+  }
+
+  function getFocusable(): HTMLElement[] {
+    if (!focusableCache && overlay) {
+      focusableCache = Array.from(
+        overlay.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    }
+    return focusableCache ?? [];
+  }
+
+  trigger?.addEventListener("click", openMenu);
+  closeBtn?.addEventListener("click", closeMenu);
+
+  // Close on Escape
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay?.classList.contains("hidden")) {
+      closeMenu();
+    }
+  });
+
+  // Focus trap
+  overlay?.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+
+    const focusable = getFocusable();
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    }
+  });
+</script>

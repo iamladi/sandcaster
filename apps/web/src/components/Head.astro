@@ -1,0 +1,36 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+  canonicalUrl?: string;
+}
+
+const { title, description, canonicalUrl } = Astro.props;
+const pageTitle =
+  title === "Sandcaster" ? "Sandcaster" : `${title} | Sandcaster`;
+const resolvedCanonical =
+  canonicalUrl ?? new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{pageTitle}</title>
+{description && <meta name="description" content={description} />}
+
+<!-- Open Graph -->
+<meta property="og:title" content={pageTitle} />
+{description && <meta property="og:description" content={description} />}
+<meta property="og:type" content="website" />
+<meta property="og:url" content={resolvedCanonical} />
+<meta property="og:site_name" content="Sandcaster" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={pageTitle} />
+{description && <meta name="twitter:description" content={description} />}
+
+<!-- Canonical -->
+<link rel="canonical" href={resolvedCanonical} />
+
+<!-- Favicon -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />

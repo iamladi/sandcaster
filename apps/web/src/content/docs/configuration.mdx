@@ -1,0 +1,176 @@
+---
+title: "Configuration"
+description: "Configure agent behavior, models, providers, and tools via sandcaster.json."
+order: 2
+section: "Getting Started"
+---
+
+## Two-Layer Configuration
+
+Sandcaster uses a two-layer config model:
+
+1. **`sandcaster.json`** — project defaults, committed to your repo, applied to every run
+2. **API request body** — per-run overrides, useful for dynamic prompts and one-off model switches
+
+Values in the API request override matching fields from `sandcaster.json`. Fields not present in the request fall back to the project config.
+
+## sandcaster.json Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `systemPrompt` | `string` | Base instructions prepended to every agent run |
+| `model` | `string` | Default model alias or full model ID |
+| `maxTurns` | `integer` | Maximum number of conversation turns before the agent stops |
+| `timeout` | `integer` | Sandbox lifetime in seconds before forced shutdown |
+| `outputFormat` | `object` | JSON Schema describing the expected structured output |
+| `skillsDir` | `string` | Path to the directory containing skill markdown files |
+| `allowedTools` | `string[]` | Whitelist of tool names the agent may call |
+| `templateSkills` | `boolean` | When `true`, skills are baked into the sandbox template image |
+| `agents` | `object` | Named sub-agent definitions for multi-agent workflows |
+| `provider` | `string` | LLM provider: `anthropic`, `openai`, `google`, or `openrouter` |
+| `sandboxProvider` | `string` | Sandbox backend: `e2b`, `docker`, `vercel`, or `cloudflare` |
+| `thinkingLevel` | `string` | Extended thinking budget: `none`, `low`, `medium`, or `high` |
+| `composite` | `object` | Multi-sandbox orchestration settings |
+
+## Example Config
+
+```json
+{
+	"systemPrompt": "You are a senior product analyst. Be concise and cite sources.",
+	"model": "sonnet",
+	"maxTurns": 40,
+	"timeout": 300,
+	"provider": "anthropic",
+	"sandboxProvider": "e2b",
+	"skillsDir": "./skills",
+	"allowedTools": ["bash", "read_file", "write_file", "web_search"]
+}
+```
+
+## Sub-Agents
+
+Define named sub-agents under the `agents` key. Each sub-agent inherits the root config and can override any field:
+
+```json
+{
+	"model": "sonnet",
+	"agents": {
+		"researcher": {
+			"systemPrompt": "You are a research specialist. Find primary sources.",
+			"model": "opus",
+			"maxTurns": 20
+		},
+		"writer": {
+			"systemPrompt": "You are a technical writer. Be clear and structured.",
+			"model": "sonnet",
+			"maxTurns": 15
+		}
+	}
+}
+```
+
+The orchestrating agent can spawn `researcher` and `writer` as independent sub-agents with their own sandboxes and model settings.
+
+## Skills
+
+Skills are markdown files that extend what an agent knows how to do. Place them in `skillsDir` (default `./skills/`). Each file follows the `SKILL.md` format:
+
+```markdown
+# Web Search Skill
+
+Use this skill to search the web for current information.
+
+## When to use
+- Researching recent events or data
+- Finding documentation or API references
+
+## How to use
+Call the `web_search` tool with a clear, specific query.
+```
+
+When `templateSkills` is `true`, skills are baked into the E2B sandbox template at build time, which speeds up cold starts.
+
+## Structured Output
+
+Set `outputFormat` to a JSON Schema object to receive structured output instead of free text:
+
+```json
+{
+	"outputFormat": {
+		"type": "object",
+		"properties": {
+			"summary": { "type": "string" },
+			"competitors": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"name": { "type": "string" },
+						"strengths": { "type": "array", "items": { "type": "string" } },
+						"weaknesses": { "type": "array", "items": { "type": "string" } }
+					}
+				}
+			},
+			"recommendation": { "type": "string" }
+		},
+		"required": ["summary", "recommendation"]
+	}
+}
+```
+
+The agent formats its final response to match the schema before the run ends.
+
+## LLM Provider Selection
+
+Set `provider` in `sandcaster.json` or override per request. Sandcaster reads the corresponding API key from your environment:
+
+| Provider | Field value | Environment variable |
+|----------|-------------|---------------------|
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | `OPENAI_API_KEY` |
+| Google | `google` | `GOOGLE_API_KEY` |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` |
+
+## Model Aliases
+
+| Alias | Resolves to |
+|-------|-------------|
+| `sonnet` | `claude-sonnet-4-6` |
+| `opus` | `claude-opus-4-6` |
+| `haiku` | `claude-haiku-4-5` |
+| `gpt5` | `gpt-5.4` |
+| `gpt5mini` | `gpt-5-mini` |
+| `gemini` | `gemini-3.1-pro-preview` |
+
+## Sandbox Provider Selection
+
+Set `sandboxProvider` to choose your execution backend. If not set, Sandcaster auto-detects based on available API keys and environment:
+
+| Provider | Field value | Best for |
+|----------|-------------|----------|
+| E2B | `e2b` | Cloud-hosted, fast cold starts, managed isolation |
+| Docker | `docker` | Self-hosted, local development |
+| Vercel | `vercel` | Edge-native deployments |
+| Cloudflare | `cloudflare` | Cloudflare Workers environment |
+
+Auto-detection priority: E2B (if `E2B_API_KEY` is set) → Docker (if Docker socket is available) → error.
+
+## Composite Sandboxes
+
+For multi-agent workflows that need parallel execution across multiple sandboxes, configure `composite`:
+
+```json
+{
+	"composite": {
+		"maxSandboxes": 5,
+		"maxTotalSpawns": 20,
+		"allowedProviders": ["e2b", "docker"]
+	}
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxSandboxes` | `integer` | Maximum number of sandboxes running concurrently |
+| `maxTotalSpawns` | `integer` | Lifetime cap on total sandboxes spawned per run |
+| `allowedProviders` | `string[]` | Restrict which sandbox backends sub-agents may use |

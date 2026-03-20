@@ -1,0 +1,44 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  version: string;
+  date: Date;
+  title?: string;
+}
+
+const { version, date, title } = Astro.props;
+
+const formattedDate = date.toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+---
+
+<BaseLayout title={title ? `${version} — ${title}` : version}>
+  <main class="max-w-3xl mx-auto px-8 py-12">
+    <header>
+      <div class="flex items-center">
+        <span
+          class="inline-flex px-3 py-1 rounded-full border border-accent text-accent text-sm font-mono"
+          >{version}</span
+        >
+        <time class="text-sm text-text-tertiary ml-3">{formattedDate}</time>
+      </div>
+      {title && <h1 class="text-2xl font-medium mt-4 mb-2">{title}</h1>}
+      <div class="border-b border-border-subtle my-8"></div>
+    </header>
+    <div class="prose">
+      <slot />
+    </div>
+    <div class="mt-12">
+      <a
+        href="/changelog"
+        class="text-sm text-text-secondary hover:text-text-primary transition"
+        >&larr; Back to Changelog</a
+      >
+    </div>
+  </main>
+</BaseLayout>

@@ -1,0 +1,30 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import DocsSidebar from "../components/DocsSidebar.astro";
+import TableOfContents from "../components/TableOfContents.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  currentId: string;
+  headings: { depth: number; slug: string; text: string }[];
+}
+
+const { title, description, currentId, headings } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <div
+    class="max-w-[1200px] mx-auto px-8 py-12 flex flex-col lg:flex-row gap-8"
+  >
+    <DocsSidebar currentId={currentId} />
+    <main class="flex-1 min-w-0 max-w-3xl">
+      <h1 class="text-3xl font-medium mb-2">{title}</h1>
+      <p class="text-text-secondary mb-8">{description}</p>
+      <div class="prose">
+        <slot />
+      </div>
+    </main>
+    <TableOfContents headings={headings} />
+  </div>
+</BaseLayout>
