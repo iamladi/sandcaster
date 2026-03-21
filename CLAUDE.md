@@ -33,10 +33,10 @@ bun run scripts/create-template.ts  # Create E2B sandbox template (needs E2B_API
 ```
 packages/core       — @sandcaster/core (data + execution layer)
 packages/sdk        — @sandcaster/sdk (standalone client SDK)
+packages/chat       — @sandcaster/chat (unified chat bot: Slack, Discord, Telegram)
 packages/ts-config  — @sandcaster/ts-config (shared TypeScript configs)
 apps/api            — @sandcaster/api (Hono server, depends on core)
-apps/cli            — @sandcaster/cli (Ink TUI, depends on core + sdk)
-apps/slack-bot      — @sandcaster/slack-bot (Slack bot, depends on core)
+apps/cli            — @sandcaster/cli (Ink TUI, depends on core + sdk + chat)
 ```
 
 ## Conventions

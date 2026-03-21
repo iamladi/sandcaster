@@ -39,6 +39,7 @@ export interface SessionManagerOptions {
 	idleTimeoutMs?: number;
 	maxActiveSessions?: number;
 	maxHistoryTurns?: number;
+	onSessionExpired?: (sessionId: string) => void;
 }
 
 /** Factory function for creating sandbox instances */

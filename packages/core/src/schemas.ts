@@ -214,6 +214,7 @@ export const SandcasterConfigSchema = z.object({
 		})
 		.optional(),
 	branching: BranchConfigSchema.optional(),
+	chat: z.object({}).passthrough().optional(),
 });
 
 export type SandcasterConfig = z.infer<typeof SandcasterConfigSchema>;

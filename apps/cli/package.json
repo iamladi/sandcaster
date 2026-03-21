@@ -59,6 +59,7 @@
 	},
 	"devDependencies": {
 		"@sandcaster/api": "workspace:*",
+		"@sandcaster/chat": "workspace:*",
 		"@sandcaster/core": "workspace:*",
 		"@sandcaster/sdk": "workspace:*",
 		"@sandcaster/ts-config": "workspace:*",

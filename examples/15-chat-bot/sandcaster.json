@@ -1,0 +1,9 @@
+{
+	"systemPrompt": "You are a helpful coding assistant running in a sandboxed environment. You can read, write, and execute code. Keep responses concise and relevant to the conversation thread.",
+	"model": "sonnet",
+	"sandboxProvider": "e2b",
+	"chat": {
+		"botName": "sandcaster",
+		"sessionTimeoutMs": 600000
+	}
+}

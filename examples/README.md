@@ -26,6 +26,7 @@ cd apps/cli && bun link   # registers `sandcaster` globally (from monorepo)
 | 12 | [dependency-audit](12-dependency-audit/) | Audit deps for CVEs, produce prioritized report | `E2B_API_KEY`, `OPENAI_API_KEY` |
 | 13 | [generate-api-docs](13-generate-api-docs/) | Generate OpenAPI spec from source code | `E2B_API_KEY`, `OPENAI_API_KEY` |
 | 14 | [onboard-to-codebase](14-onboard-to-codebase/) | Produce architecture overview of a codebase | `E2B_API_KEY`, `OPENAI_API_KEY` |
+| 15 | [chat-bot](15-chat-bot/) | Chat bot with Slack/Discord/Telegram + HTTP gateway | `E2B_API_KEY`, `ANTHROPIC_API_KEY`, platform tokens |
 
 ## Running an example
 

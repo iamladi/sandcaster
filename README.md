@@ -147,12 +147,12 @@ sandcaster/
 │   │   ├── providers/     E2B, Vercel, Docker, Cloudflare Containers implementations
 │   │   └── runner/        In-sandbox runner, IPC client, composite tools
 │   ├── sdk                @sandcaster/sdk — standalone TypeScript client
+│   ├── chat               @sandcaster/chat — unified chat bot (Slack, Discord, Telegram)
 │   ├── cloudflare-worker  Cloudflare Worker proxy for sandbox operations
 │   └── ts-config          @sandcaster/ts-config — shared TypeScript configs
 ├── apps/
 │   ├── api                @sandcaster/api — Hono REST server (SSE streaming)
-│   ├── cli                @sandcaster/cli — Ink TUI with starters catalog
-│   └── slack-bot          @sandcaster/slack-bot — Slack integration
+│   └── cli                @sandcaster/cli — Ink TUI with starters catalog + chat bot
 └── scripts/               E2B template management
 ```
 
