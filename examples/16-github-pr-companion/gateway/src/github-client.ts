@@ -21,7 +21,7 @@ function delay(ms: number): Promise<void> {
 export function createGitHubClient(config: GitHubClientDeps) {
 	async function authHeader(): Promise<string> {
 		const resolved = await config.getToken();
-		return `${resolved.authHeader} ${resolved.token}`;
+		return resolved.authHeader;
 	}
 
 	async function fetchReviewComments(
@@ -43,6 +43,12 @@ export function createGitHubClient(config: GitHubClientDeps) {
 					Accept: "application/vnd.github+json",
 				},
 			});
+
+			if (!response.ok) {
+				throw new Error(
+					`GitHub API error: ${response.status} ${response.statusText}`,
+				);
+			}
 
 			const data = (await response.json()) as Array<{
 				id: number;
@@ -85,7 +91,7 @@ export function createGitHubClient(config: GitHubClientDeps) {
 			}
 
 			const reply = replies[i];
-			await fetch(
+			const response = await fetch(
 				`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/comments/${reply.commentId}/replies`,
 				{
 					method: "POST",
@@ -97,6 +103,11 @@ export function createGitHubClient(config: GitHubClientDeps) {
 					body: JSON.stringify({ body: reply.body }),
 				},
 			);
+			if (!response.ok) {
+				console.error(
+					`[pr-companion] Failed to post reply to comment ${reply.commentId}: ${response.status}`,
+				);
+			}
 		}
 	}
 
@@ -121,6 +132,12 @@ export function createGitHubClient(config: GitHubClientDeps) {
 				},
 			},
 		);
+
+		if (!response.ok) {
+			throw new Error(
+				`GitHub API error: ${response.status} ${response.statusText}`,
+			);
+		}
 
 		const data = (await response.json()) as {
 			head: {

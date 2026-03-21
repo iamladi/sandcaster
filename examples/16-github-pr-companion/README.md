@@ -49,10 +49,10 @@ For local development with a Personal Access Token.
 ### 2. Environment
 
 ```bash
-cp .env.sample .env
+cp .env.sample gateway/.env
 ```
 
-Fill in:
+Fill in `gateway/.env`:
 
 ```
 GITHUB_TOKEN=ghp_...           # PAT with repo scope
@@ -109,10 +109,10 @@ Install it on the target repository/organization.
 ### 3. Environment
 
 ```bash
-cp .env.sample .env
+cp .env.sample gateway/.env
 ```
 
-Fill in:
+Fill in `gateway/.env`:
 
 ```
 GITHUB_APP_ID=123456

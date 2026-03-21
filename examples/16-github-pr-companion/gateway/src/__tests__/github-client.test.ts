@@ -29,7 +29,7 @@ afterAll(() => server.close());
 
 const RESOLVED_TOKEN: ResolvedToken = {
 	token: "ghs_test_token",
-	authHeader: "x-access-token",
+	authHeader: "token ghs_test_token",
 };
 
 function makeClient(token: ResolvedToken = RESOLVED_TOKEN) {
@@ -198,11 +198,11 @@ describe("fetchReviewComments", () => {
 
 		const client = makeClient({
 			token: "ghs_abc123",
-			authHeader: "x-access-token",
+			authHeader: "token ghs_abc123",
 		});
 		await client.fetchReviewComments("acme", "myrepo", 7, 999);
 
-		expect(capturedAuth).toBe("x-access-token ghs_abc123");
+		expect(capturedAuth).toBe("token ghs_abc123");
 	});
 });
 
@@ -338,7 +338,7 @@ describe("postReplies", () => {
 
 		const client = makeClient({
 			token: "ghs_xyz789",
-			authHeader: "x-access-token",
+			authHeader: "token ghs_xyz789",
 		});
 		const promise = client.postReplies("acme", "myrepo", 7, [
 			{ commentId: 1, body: "done" },
@@ -346,7 +346,7 @@ describe("postReplies", () => {
 		await vi.runAllTimersAsync();
 		await promise;
 
-		expect(capturedAuth).toBe("x-access-token ghs_xyz789");
+		expect(capturedAuth).toBe("token ghs_xyz789");
 	});
 });
 
@@ -506,10 +506,10 @@ describe("fetchPrDetails", () => {
 
 		const client = makeClient({
 			token: "pat_secrettoken",
-			authHeader: "pat_secrettoken",
+			authHeader: "token pat_secrettoken",
 		});
 		await client.fetchPrDetails("acme", "myrepo", 12);
 
-		expect(capturedAuth).toBe("pat_secrettoken pat_secrettoken");
+		expect(capturedAuth).toBe("token pat_secrettoken");
 	});
 });

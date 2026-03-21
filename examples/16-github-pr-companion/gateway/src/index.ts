@@ -194,12 +194,21 @@ async function processReview(
 function createRealPatchDeps(): PatchApplierDeps {
 	return {
 		async exec(cmd: string, opts?: { cwd?: string }): Promise<string> {
-			const { execSync } = await import("node:child_process");
-			return execSync(cmd, {
-				cwd: opts?.cwd,
-				encoding: "utf-8",
-				timeout: 60_000,
-				maxBuffer: 10 * 1024 * 1024,
+			const { exec: execCb } = await import("node:child_process");
+			return new Promise<string>((resolve, reject) => {
+				execCb(
+					cmd,
+					{
+						cwd: opts?.cwd,
+						encoding: "utf-8",
+						timeout: 60_000,
+						maxBuffer: 10 * 1024 * 1024,
+					},
+					(err, stdout) => {
+						if (err) reject(err);
+						else resolve(stdout);
+					},
+				);
 			});
 		},
 		async writeFile(path: string, content: string): Promise<void> {
