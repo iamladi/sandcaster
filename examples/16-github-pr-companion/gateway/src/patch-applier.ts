@@ -30,6 +30,25 @@ function buildAuthenticatedUrl(cloneUrl: string, token: string): string {
 	return cloneUrl.replace("https://", `https://x-access-token:${token}@`);
 }
 
+/** Shell-escape a string to prevent command injection */
+function shellQuote(s: string): string {
+	// Wrap in single quotes, escaping any embedded single quotes
+	return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/** Validate branch name against git's allowed characters */
+function validateBranchName(branch: string): void {
+	// Git branch names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
+	// They also can't start with - or contain ..
+	if (
+		/[\s~^:?*[\]\\]/.test(branch) ||
+		branch.includes("..") ||
+		branch.startsWith("-")
+	) {
+		throw new Error(`Invalid branch name: ${branch}`);
+	}
+}
+
 function isPermissionError(err: unknown): boolean {
 	const msg = err instanceof Error ? err.message.toLowerCase() : "";
 	return msg.includes("permission") || msg.includes("denied");
@@ -44,16 +63,21 @@ export function createPatchApplier(deps: PatchApplierDeps) {
 	return {
 		async applyAndPush(params: ApplyAndPushParams): Promise<PatchResult> {
 			const { cloneUrl, branch, token, agentOutput, isFork } = params;
+			validateBranchName(branch);
 			const tempDir = await deps.mkTempDir();
 			const repoDir = `${tempDir}/repo`;
 
 			try {
 				// Step 1: Clone with token-authenticated URL
 				const authUrl = buildAuthenticatedUrl(cloneUrl, token.token);
-				await deps.exec(`git clone ${authUrl} ${repoDir}`);
+				await deps.exec(
+					`git clone ${shellQuote(authUrl)} ${shellQuote(repoDir)}`,
+				);
 
 				// Step 2: Checkout branch
-				await deps.exec(`git checkout ${branch}`, { cwd: repoDir });
+				await deps.exec(`git checkout ${shellQuote(branch)}`, {
+					cwd: repoDir,
+				});
 
 				// Step 3: Configure git user
 				await deps.exec(`git config user.email "bot@sandcaster.dev"`, {
@@ -96,13 +120,15 @@ export function createPatchApplier(deps: PatchApplierDeps) {
 
 					// Step 9: Push with retry logic
 					try {
-						await deps.exec(`git push origin ${branch}`, { cwd: repoDir });
+						await deps.exec(`git push origin ${shellQuote(branch)}`, {
+							cwd: repoDir,
+						});
 					} catch (firstPushErr) {
 						if (isNonFastForwardError(firstPushErr)) {
 							// Try rebase and retry push
 							try {
 								await deps.exec("git pull --rebase", { cwd: repoDir });
-								await deps.exec(`git push origin ${branch}`, {
+								await deps.exec(`git push origin ${shellQuote(branch)}`, {
 									cwd: repoDir,
 								});
 							} catch (rebaseOrRetryErr) {

@@ -169,4 +169,4 @@ The `sandcaster.json` configures the agent that runs inside the sandbox. It incl
 - **"Invalid signature" 401**: Check that `GITHUB_WEBHOOK_SECRET` matches your GitHub webhook configuration
 - **Bot not responding**: Verify the bot's login is in `BOT_ALLOWLIST` (check exact format including `[bot]` suffix)
 - **Fork PRs**: The gateway attempts to push but may fail if "Allow edits from maintainers" is disabled
-- **Rate limits**: The gateway uses 1s delay between replies; for very large reviews (>10 comments), they're chunked into batches
+- **Rate limits**: The gateway uses 1s delay between replies. Reviews with >10 comments are chunked into sequential sandbox runs of 10 comments each
