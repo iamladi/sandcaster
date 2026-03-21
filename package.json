@@ -19,6 +19,8 @@
 		"@changesets/changelog-github": "^0.6.0",
 		"@changesets/cli": "^2.30.0",
 		"e2b": "^2.14.1",
+		"jose": "^6.2.2",
+		"msw": "^2.12.14",
 		"turbo": "^2.8.16",
 		"typescript": "^5.9.3",
 		"vitest": "^4.0.18"
