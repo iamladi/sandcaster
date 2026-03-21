@@ -6,13 +6,9 @@ import type {
 } from "../types.js";
 import {
 	createDeliveryTracker,
+	createSignatureVerifier,
 	parseWebhookPayload,
-	verifySignature,
 } from "../webhook-handler.js";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /** Encode a string to Uint8Array (UTF-8) */
 function encode(s: string): Uint8Array {
@@ -114,17 +110,14 @@ const defaultDeps: WebhookHandlerDeps = {
 	ownBotLogin: "my-fix-bot[bot]",
 };
 
-// ---------------------------------------------------------------------------
-// verifySignature
-// ---------------------------------------------------------------------------
-
-describe("verifySignature", () => {
+describe("createSignatureVerifier", () => {
 	it("accepts a valid HMAC-SHA256 signature", async () => {
 		const body = encode('{"event":"ping"}');
 		const secret = "test-secret";
+		const verify = await createSignatureVerifier(secret);
 		const sig = await computeSignature(body, secret);
 
-		const result = await verifySignature(body, sig, secret);
+		const result = await verify(body, sig);
 
 		expect(result).toBe(true);
 	});
@@ -132,16 +125,18 @@ describe("verifySignature", () => {
 	it("rejects a signature computed with the wrong secret", async () => {
 		const body = encode('{"event":"ping"}');
 		const sig = await computeSignature(body, "wrong-secret");
+		const verify = await createSignatureVerifier("correct-secret");
 
-		const result = await verifySignature(body, sig, "correct-secret");
+		const result = await verify(body, sig);
 
 		expect(result).toBe(false);
 	});
 
 	it("rejects an empty signature string", async () => {
 		const body = encode('{"event":"ping"}');
+		const verify = await createSignatureVerifier("any-secret");
 
-		const result = await verifySignature(body, "", "any-secret");
+		const result = await verify(body, "");
 
 		expect(result).toBe(false);
 	});
@@ -149,43 +144,38 @@ describe("verifySignature", () => {
 	it("rejects a signature that omits the sha256= prefix", async () => {
 		const body = encode('{"event":"ping"}');
 		const secret = "test-secret";
+		const verify = await createSignatureVerifier(secret);
 		const sig = await computeSignature(body, secret);
-		// Strip the `sha256=` prefix so it becomes bare hex
 		const bareHex = sig.replace("sha256=", "");
 
-		const result = await verifySignature(body, bareHex, secret);
+		const result = await verify(body, bareHex);
 
 		expect(result).toBe(false);
 	});
 
 	it("verifies against raw bytes — not re-serialized JSON", async () => {
-		// Raw body has unusual whitespace that would change if re-serialized
 		const rawBodyStr = '{ "a" : 1 ,  "b" : 2 }';
 		const rawBody = encode(rawBodyStr);
 		const secret = "raw-bytes-secret";
+		const verify = await createSignatureVerifier(secret);
 		const sig = await computeSignature(rawBody, secret);
 
-		// Signature valid against the exact raw bytes
-		expect(await verifySignature(rawBody, sig, secret)).toBe(true);
+		expect(await verify(rawBody, sig)).toBe(true);
 
-		// Signature invalid against the compacted version of the same JSON
 		const compactBody = encode('{"a":1,"b":2}');
-		expect(await verifySignature(compactBody, sig, secret)).toBe(false);
+		expect(await verify(compactBody, sig)).toBe(false);
 	});
 
 	it("rejects a tampered body even with a valid signature for the original", async () => {
 		const original = encode("original content");
 		const tampered = encode("tampered content");
 		const secret = "tamper-secret";
+		const verify = await createSignatureVerifier(secret);
 		const sig = await computeSignature(original, secret);
 
-		expect(await verifySignature(tampered, sig, secret)).toBe(false);
+		expect(await verify(tampered, sig)).toBe(false);
 	});
 });
-
-// ---------------------------------------------------------------------------
-// parseWebhookPayload
-// ---------------------------------------------------------------------------
 
 describe("parseWebhookPayload", () => {
 	it("parses a submitted CodeRabbit bot review into a ReviewEvent", () => {
@@ -364,10 +354,6 @@ describe("parseWebhookPayload", () => {
 		});
 	});
 });
-
-// ---------------------------------------------------------------------------
-// createDeliveryTracker
-// ---------------------------------------------------------------------------
 
 describe("createDeliveryTracker", () => {
 	it("grants acquisition on the first attempt for a new delivery ID", () => {

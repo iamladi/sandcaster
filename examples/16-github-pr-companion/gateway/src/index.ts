@@ -1,3 +1,7 @@
+import { exec as execCb } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { SandcasterEvent } from "@sandcaster/core";
 import { loadConfig, runAgentInSandbox } from "@sandcaster/core";
@@ -8,13 +12,9 @@ import { createPatchApplier, type PatchApplierDeps } from "./patch-applier.js";
 import type { AuthMode, ReviewComment, ReviewEvent } from "./types.js";
 import {
 	createDeliveryTracker,
+	createSignatureVerifier,
 	parseWebhookPayload,
-	verifySignature,
 } from "./webhook-handler.js";
-
-// ---------------------------------------------------------------------------
-// AppDeps — all external dependencies injected for testability
-// ---------------------------------------------------------------------------
 
 export interface AppDeps {
 	runAgent: (prompt: string) => AsyncGenerator<SandcasterEvent>;
@@ -22,38 +22,35 @@ export interface AppDeps {
 	webhookSecret: string;
 	botAllowlist: string[];
 	ownBotLogin: string;
-	port: number;
 }
 
-// ---------------------------------------------------------------------------
-// createApp
-// ---------------------------------------------------------------------------
-
-export function createApp(deps: AppDeps): Hono {
+export async function createApp(deps: AppDeps): Promise<Hono> {
 	const app = new Hono();
 	const tracker = createDeliveryTracker();
+	const verifySignature = await createSignatureVerifier(deps.webhookSecret);
 
 	app.get("/health", (c) => c.json({ status: "ok" }));
 
 	app.post("/webhooks/github", async (c) => {
-		// FR-11: Capture raw body BEFORE JSON parsing for HMAC verification
 		const rawBody = new Uint8Array(await c.req.arrayBuffer());
 
-		// Signature verification (FR-2)
 		const signature = c.req.header("x-hub-signature-256") ?? "";
 		if (!signature) {
 			return c.json({ error: "Missing signature" }, 401);
 		}
 
-		const valid = await verifySignature(rawBody, signature, deps.webhookSecret);
+		const valid = await verifySignature(rawBody, signature);
 		if (!valid) {
 			return c.json({ error: "Invalid signature" }, 401);
 		}
 
-		// Parse JSON payload
-		const payload = JSON.parse(new TextDecoder().decode(rawBody));
+		let payload: unknown;
+		try {
+			payload = JSON.parse(new TextDecoder().decode(rawBody));
+		} catch {
+			return c.json({ error: "Invalid JSON payload" }, 400);
+		}
 
-		// Filter and parse (FR-1, FR-3)
 		const event = parseWebhookPayload(payload, {
 			webhookSecret: deps.webhookSecret,
 			botAllowlist: deps.botAllowlist,
@@ -64,16 +61,13 @@ export function createApp(deps: AppDeps): Hono {
 			return c.body(null, 204);
 		}
 
-		// Dedup (FR-9)
 		const deliveryId = c.req.header("x-github-delivery") ?? "";
 		if (!tracker.tryAcquire(deliveryId)) {
 			return c.json({ error: "Duplicate delivery" }, 409);
 		}
 
-		// Inject delivery ID into the event
 		event.deliveryId = deliveryId;
 
-		// FR-10: Return 202 immediately, process asynchronously
 		void processReview(deps, event, tracker);
 
 		return c.json({ accepted: true }, 202);
@@ -81,10 +75,6 @@ export function createApp(deps: AppDeps): Hono {
 
 	return app;
 }
-
-// ---------------------------------------------------------------------------
-// Prompt formatting (FR-4)
-// ---------------------------------------------------------------------------
 
 const MAX_COMMENTS_PER_BATCH = 10;
 
@@ -111,9 +101,8 @@ function formatPrompt(comments: ReviewComment[]): string {
 	return lines.join("\n");
 }
 
-// ---------------------------------------------------------------------------
-// Async pipeline (runs after 202 response)
-// ---------------------------------------------------------------------------
+const patchDeps = createRealPatchDeps();
+const applier = createPatchApplier(patchDeps);
 
 async function processReview(
 	deps: AppDeps,
@@ -124,7 +113,6 @@ async function processReview(
 	const github = createGitHubClient({ getToken });
 
 	try {
-		// 1. Fetch all review comments with pagination (FR-8)
 		const allComments = await github.fetchReviewComments(
 			event.owner,
 			event.repo,
@@ -137,12 +125,10 @@ async function processReview(
 			return;
 		}
 
-		// 2. Chunk into batches of MAX_COMMENTS_PER_BATCH (FR-4)
 		for (let i = 0; i < allComments.length; i += MAX_COMMENTS_PER_BATCH) {
 			const batch = allComments.slice(i, i + MAX_COMMENTS_PER_BATCH);
 			const prompt = formatPrompt(batch);
 
-			// 3. Run agent in sandbox
 			let resultContent = "";
 			for await (const ev of deps.runAgent(prompt)) {
 				if (ev.type === "result") {
@@ -152,12 +138,7 @@ async function processReview(
 
 			if (!resultContent) continue;
 
-			// 4. Parse structured output (FR-5)
 			const agentOutput = JSON.parse(resultContent);
-
-			// 5. Apply patches and push (gateway-side, secure)
-			const patchDeps = createRealPatchDeps();
-			const applier = createPatchApplier(patchDeps);
 			const token = await getToken();
 
 			const result = await applier.applyAndPush({
@@ -168,7 +149,6 @@ async function processReview(
 				isFork: event.isFork,
 			});
 
-			// 6. Post replies with pacing (FR-6)
 			await github.postReplies(
 				event.owner,
 				event.repo,
@@ -187,14 +167,9 @@ async function processReview(
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Real system dependencies for PatchApplier
-// ---------------------------------------------------------------------------
-
 function createRealPatchDeps(): PatchApplierDeps {
 	return {
-		async exec(cmd: string, opts?: { cwd?: string }): Promise<string> {
-			const { exec: execCb } = await import("node:child_process");
+		exec(cmd: string, opts?: { cwd?: string }): Promise<string> {
 			return new Promise<string>((resolve, reject) => {
 				execCb(
 					cmd,
@@ -211,30 +186,20 @@ function createRealPatchDeps(): PatchApplierDeps {
 				);
 			});
 		},
-		async writeFile(path: string, content: string): Promise<void> {
-			const { writeFile } = await import("node:fs/promises");
-			await writeFile(path, content, "utf-8");
+		writeFile(path: string, content: string): Promise<void> {
+			return writeFile(path, content, "utf-8");
 		},
-		async readFile(path: string): Promise<string> {
-			const { readFile } = await import("node:fs/promises");
+		readFile(path: string): Promise<string> {
 			return readFile(path, "utf-8");
 		},
-		async mkTempDir(): Promise<string> {
-			const { mkdtemp } = await import("node:fs/promises");
-			const { tmpdir } = await import("node:os");
-			const { join } = await import("node:path");
+		mkTempDir(): Promise<string> {
 			return mkdtemp(join(tmpdir(), "pr-companion-"));
 		},
-		async rmDir(path: string): Promise<void> {
-			const { rm } = await import("node:fs/promises");
-			await rm(path, { recursive: true, force: true });
+		rmDir(path: string): Promise<void> {
+			return rm(path, { recursive: true, force: true });
 		},
 	};
 }
-
-// ---------------------------------------------------------------------------
-// Server startup (only when run directly, not when imported by tests)
-// ---------------------------------------------------------------------------
 
 const isMainModule =
 	typeof process !== "undefined" &&
@@ -267,6 +232,10 @@ if (isMainModule) {
 	const ownBotLogin =
 		process.env.OWN_BOT_LOGIN ?? "sandcaster-pr-companion[bot]";
 	const port = Number.parseInt(process.env.PORT ?? "8080", 10);
+	if (Number.isNaN(port) || port < 1 || port > 65535) {
+		console.error("PORT must be a valid port number (1-65535).");
+		process.exit(1);
+	}
 
 	const runAgent = (prompt: string) =>
 		runAgentInSandbox({
@@ -274,17 +243,16 @@ if (isMainModule) {
 			config,
 		});
 
-	const app = createApp({
+	createApp({
 		runAgent,
 		auth,
 		webhookSecret,
 		botAllowlist,
 		ownBotLogin,
-		port,
-	});
-
-	serve({ fetch: app.fetch, port }, () => {
-		console.log(`PR Companion gateway listening on http://localhost:${port}`);
-		console.log("Webhook endpoint: POST /webhooks/github");
+	}).then((app) => {
+		serve({ fetch: app.fetch, port }, () => {
+			console.log(`PR Companion gateway listening on http://localhost:${port}`);
+			console.log("Webhook endpoint: POST /webhooks/github");
+		});
 	});
 }

@@ -1,20 +1,7 @@
 import type { SandcasterEvent } from "@sandcaster/core";
 import { describe, expect, test } from "vitest";
-import type { AgentOutput, AuthMode } from "../types.js";
-
-// ---------------------------------------------------------------------------
-// createApp — dynamically imported so the module doesn't need to exist yet
-// ---------------------------------------------------------------------------
-
 import { createApp } from "../index.js";
-
-// ---------------------------------------------------------------------------
-// MSW server — mocks GitHub API calls made during pipeline processing
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import type { AgentOutput, AuthMode } from "../types.js";
 
 const WEBHOOK_SECRET = "test-webhook-secret";
 
@@ -148,7 +135,6 @@ async function* mockRunAgent(_prompt: string): AsyncGenerator<SandcasterEvent> {
 	};
 }
 
-/** Create the app with default test deps */
 function makeApp() {
 	return createApp({
 		runAgent: mockRunAgent,
@@ -156,17 +142,12 @@ function makeApp() {
 		webhookSecret: WEBHOOK_SECRET,
 		botAllowlist: BOT_ALLOWLIST,
 		ownBotLogin: OWN_BOT_LOGIN,
-		port: 3000,
 	});
 }
 
-// ---------------------------------------------------------------------------
-// Health check
-// ---------------------------------------------------------------------------
-
 describe("GET /health", () => {
 	test("returns 200 with { status: 'ok' }", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 
 		const res = await app.request("http://localhost/health");
 
@@ -176,13 +157,9 @@ describe("GET /health", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// POST /webhooks/github — valid webhook
-// ---------------------------------------------------------------------------
-
 describe("POST /webhooks/github", () => {
 	test("returns 202 for a valid bot review webhook", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload();
 		const req = await buildSignedRequest(payload, "delivery-001");
 
@@ -192,7 +169,7 @@ describe("POST /webhooks/github", () => {
 	});
 
 	test("reads X-GitHub-Delivery header from the request", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload();
 		const deliveryId = "unique-delivery-xyz";
 		const req = await buildSignedRequest(payload, deliveryId);
@@ -203,12 +180,8 @@ describe("POST /webhooks/github", () => {
 		expect(res.status).toBe(202);
 	});
 
-	// -------------------------------------------------------------------------
-	// Signature verification
-	// -------------------------------------------------------------------------
-
 	test("returns 401 for an invalid signature", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload();
 		const body = JSON.stringify(payload);
 
@@ -227,7 +200,7 @@ describe("POST /webhooks/github", () => {
 	});
 
 	test("returns 401 when x-hub-signature-256 header is missing", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload();
 		const body = JSON.stringify(payload);
 
@@ -244,12 +217,8 @@ describe("POST /webhooks/github", () => {
 		expect(res.status).toBe(401);
 	});
 
-	// -------------------------------------------------------------------------
-	// Filtering — non-bot reviewer
-	// -------------------------------------------------------------------------
-
 	test("returns 204 for a review from a human not in the bot allowlist", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload({
 			reviewerLogin: "human-reviewer",
 			senderLogin: "human-reviewer",
@@ -261,12 +230,8 @@ describe("POST /webhooks/github", () => {
 		expect(res.status).toBe(204);
 	});
 
-	// -------------------------------------------------------------------------
-	// Self-loop prevention
-	// -------------------------------------------------------------------------
-
 	test("returns 204 when the review is from the companion's own bot login", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload({
 			reviewerLogin: "coderabbitai[bot]",
 			senderLogin: OWN_BOT_LOGIN,
@@ -278,12 +243,8 @@ describe("POST /webhooks/github", () => {
 		expect(res.status).toBe(204);
 	});
 
-	// -------------------------------------------------------------------------
-	// Duplicate delivery deduplication
-	// -------------------------------------------------------------------------
-
 	test("returns 409 on a duplicate delivery ID", async () => {
-		const app = makeApp();
+		const app = await makeApp();
 		const payload = buildWebhookPayload();
 		const deliveryId = "delivery-dup-001";
 

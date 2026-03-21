@@ -1,10 +1,6 @@
 import { importPKCS8, SignJWT } from "jose";
 import type { AuthMode, ResolvedToken } from "./types.js";
 
-// ---------------------------------------------------------------------------
-// resolveAuthMode
-// ---------------------------------------------------------------------------
-
 const APP_VARS = [
 	"GITHUB_APP_ID",
 	"GITHUB_APP_PRIVATE_KEY",
@@ -47,10 +43,6 @@ export function resolveAuthMode(
 	);
 }
 
-// ---------------------------------------------------------------------------
-// createTokenProvider
-// ---------------------------------------------------------------------------
-
 const CACHE_TTL_MS = 3_000_000; // 50 minutes
 
 export function createTokenProvider(
@@ -64,9 +56,9 @@ export function createTokenProvider(
 		return () => Promise.resolve(resolved);
 	}
 
-	// App mode — cache the installation token
 	let cachedToken: string | null = null;
 	let cacheExpiresAt = 0;
+	let cachedCryptoKey: CryptoKey | null = null;
 
 	return async (): Promise<ResolvedToken> => {
 		const now = Date.now();
@@ -75,8 +67,10 @@ export function createTokenProvider(
 			return { token: cachedToken, authHeader: `token ${cachedToken}` };
 		}
 
-		// Generate JWT
-		const privateKey = await importPKCS8(auth.privateKey, "RS256");
+		if (!cachedCryptoKey) {
+			cachedCryptoKey = await importPKCS8(auth.privateKey, "RS256");
+		}
+		const privateKey = cachedCryptoKey;
 		const nowSec = Math.floor(Date.now() / 1000);
 		const jwt = await new SignJWT({})
 			.setProtectedHeader({ alg: "RS256" })

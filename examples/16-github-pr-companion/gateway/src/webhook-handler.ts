@@ -11,24 +11,13 @@ export interface DeliveryTracker {
 	getState(deliveryId: string): DeliveryState | null;
 }
 
-// ---------------------------------------------------------------------------
-// verifySignature
-// ---------------------------------------------------------------------------
-
 /**
- * Verify a GitHub-style HMAC-SHA256 webhook signature.
- * Signature format: `sha256=<hex>`
- * Uses constant-time comparison via crypto.subtle.verify to prevent timing attacks.
+ * Create a reusable signature verifier that caches the HMAC key.
+ * Returns an async function: (rawBody, signature) => boolean.
  */
-export async function verifySignature(
-	rawBody: Uint8Array,
-	signature: string,
+export async function createSignatureVerifier(
 	secret: string,
-): Promise<boolean> {
-	if (!signature || !signature.startsWith("sha256=")) {
-		return false;
-	}
-
+): Promise<(rawBody: Uint8Array, signature: string) => Promise<boolean>> {
 	const key = await crypto.subtle.importKey(
 		"raw",
 		new TextEncoder().encode(secret).buffer as ArrayBuffer,
@@ -37,34 +26,35 @@ export async function verifySignature(
 		["sign"],
 	);
 
-	const sig = await crypto.subtle.sign(
-		"HMAC",
-		key,
-		rawBody.buffer as ArrayBuffer,
-	);
+	return async (rawBody: Uint8Array, signature: string): Promise<boolean> => {
+		if (!signature || !signature.startsWith("sha256=")) {
+			return false;
+		}
 
-	const expectedHex = Array.from(new Uint8Array(sig))
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
+		const sig = await crypto.subtle.sign(
+			"HMAC",
+			key,
+			rawBody.buffer as ArrayBuffer,
+		);
 
-	const actualHex = signature.slice("sha256=".length);
+		const expectedHex = Array.from(new Uint8Array(sig))
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("");
 
-	// Constant-time comparison: compare every character regardless of mismatch
-	if (expectedHex.length !== actualHex.length) {
-		return false;
-	}
+		const actualHex = signature.slice("sha256=".length);
 
-	let diff = 0;
-	for (let i = 0; i < expectedHex.length; i++) {
-		diff |= expectedHex.charCodeAt(i) ^ actualHex.charCodeAt(i);
-	}
+		if (expectedHex.length !== actualHex.length) {
+			return false;
+		}
 
-	return diff === 0;
+		let diff = 0;
+		for (let i = 0; i < expectedHex.length; i++) {
+			diff |= expectedHex.charCodeAt(i) ^ actualHex.charCodeAt(i);
+		}
+
+		return diff === 0;
+	};
 }
-
-// ---------------------------------------------------------------------------
-// parseWebhookPayload
-// ---------------------------------------------------------------------------
 
 interface RawPayload {
 	action: string;
@@ -96,17 +86,12 @@ interface RawPayload {
 	};
 }
 
-/**
- * Parse and filter a raw webhook payload into a ReviewEvent.
- * Returns null if the event should not be processed.
- */
 export function parseWebhookPayload(
 	payload: unknown,
 	deps: WebhookHandlerDeps,
 ): ReviewEvent | null {
 	const p = payload as RawPayload;
 
-	// Only process "submitted" review events
 	if (p.action !== "submitted") {
 		return null;
 	}
@@ -114,12 +99,11 @@ export function parseWebhookPayload(
 	const reviewerLogin = p.review.user.login;
 	const senderLogin = p.sender.login;
 
-	// Ignore reviews from users not in the allowlist
 	if (!deps.botAllowlist.includes(reviewerLogin)) {
 		return null;
 	}
 
-	// Prevent self-loop: ignore events where the sender is our own bot
+	// Prevent self-loop
 	if (senderLogin === deps.ownBotLogin) {
 		return null;
 	}
@@ -130,7 +114,6 @@ export function parseWebhookPayload(
 	const isFork = headRepo.full_name !== baseRepo.full_name;
 	const cloneUrl = isFork ? headRepo.clone_url : baseRepo.clone_url;
 
-	// owner/repo always come from the base repo (source of truth for API calls)
 	const owner = baseRepo.owner.login;
 	const repo = baseRepo.name;
 
@@ -148,36 +131,33 @@ export function parseWebhookPayload(
 	};
 }
 
-// ---------------------------------------------------------------------------
-// createDeliveryTracker
-// ---------------------------------------------------------------------------
+const DEFAULT_TTL_MS = 10 * 60 * 1000;
 
-const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-/**
- * Create a delivery tracker that deduplicates webhook deliveries.
- */
 export function createDeliveryTracker(ttlMs = DEFAULT_TTL_MS): DeliveryTracker {
 	const store = new Map<string, DeliveryState>();
+	const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 	function scheduleExpiry(deliveryId: string): void {
-		setTimeout(() => {
+		const existing = timers.get(deliveryId);
+		if (existing !== undefined) clearTimeout(existing);
+
+		const handle = setTimeout(() => {
 			store.delete(deliveryId);
+			timers.delete(deliveryId);
 		}, ttlMs);
+		timers.set(deliveryId, handle);
 	}
 
 	return {
 		tryAcquire(deliveryId: string): boolean {
 			const state = store.get(deliveryId);
 
-			// New entry or previously failed: allow processing
 			if (state === undefined || state === "failed") {
 				store.set(deliveryId, "processing");
 				scheduleExpiry(deliveryId);
 				return true;
 			}
 
-			// Already processing or completed: deny
 			return false;
 		},
 

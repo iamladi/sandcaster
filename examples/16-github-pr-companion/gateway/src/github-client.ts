@@ -1,9 +1,5 @@
 import type { CommentReply, GitHubClientDeps, ReviewComment } from "./types.js";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function parseNextLink(linkHeader: string | null): string | null {
 	if (!linkHeader) return null;
 	const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
@@ -13,10 +9,6 @@ function parseNextLink(linkHeader: string | null): string | null {
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// ---------------------------------------------------------------------------
-// Client factory
-// ---------------------------------------------------------------------------
 
 export function createGitHubClient(config: GitHubClientDeps) {
 	async function authHeader(): Promise<string> {

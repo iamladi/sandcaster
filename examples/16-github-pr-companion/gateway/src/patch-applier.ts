@@ -1,7 +1,4 @@
-// ---------------------------------------------------------------------------
-// Patch applier — clones a branch, writes agent fixes, commits and pushes
-// ---------------------------------------------------------------------------
-
+import { shellQuote } from "@sandcaster/core";
 import type { AgentOutput, CommentReply, ResolvedToken } from "./types.js";
 
 export interface PatchApplierDeps {
@@ -26,20 +23,10 @@ interface ApplyAndPushParams {
 }
 
 function buildAuthenticatedUrl(cloneUrl: string, token: string): string {
-	// https://github.com/owner/repo.git → https://x-access-token:TOKEN@github.com/owner/repo.git
 	return cloneUrl.replace("https://", `https://x-access-token:${token}@`);
 }
 
-/** Shell-escape a string to prevent command injection */
-function shellQuote(s: string): string {
-	// Wrap in single quotes, escaping any embedded single quotes
-	return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-/** Validate branch name against git's allowed characters */
 function validateBranchName(branch: string): void {
-	// Git branch names cannot contain: space, ~, ^, :, ?, *, [, \, control chars
-	// They also can't start with - or contain ..
 	if (
 		/[\s~^:?*[\]\\]/.test(branch) ||
 		branch.includes("..") ||
@@ -47,6 +34,10 @@ function validateBranchName(branch: string): void {
 	) {
 		throw new Error(`Invalid branch name: ${branch}`);
 	}
+}
+
+function toError(err: unknown): Error {
+	return err instanceof Error ? err : new Error(String(err));
 }
 
 function isPermissionError(err: unknown): boolean {
@@ -68,34 +59,30 @@ export function createPatchApplier(deps: PatchApplierDeps) {
 			const repoDir = `${tempDir}/repo`;
 
 			try {
-				// Step 1: Clone with token-authenticated URL
 				const authUrl = buildAuthenticatedUrl(cloneUrl, token.token);
 				await deps.exec(
 					`git clone ${shellQuote(authUrl)} ${shellQuote(repoDir)}`,
 				);
 
-				// Step 2: Checkout branch
 				await deps.exec(`git checkout ${shellQuote(branch)}`, {
 					cwd: repoDir,
 				});
 
-				// Step 3: Configure git user
-				await deps.exec(`git config user.email "bot@sandcaster.dev"`, {
-					cwd: repoDir,
-				});
-				await deps.exec(`git config user.name "Sandcaster Bot"`, {
-					cwd: repoDir,
-				});
+				await Promise.all([
+					deps.exec(`git config user.email "bot@sandcaster.dev"`, {
+						cwd: repoDir,
+					}),
+					deps.exec(`git config user.name "Sandcaster Bot"`, {
+						cwd: repoDir,
+					}),
+				]);
 
-				// Step 4: Check for fixed results
 				const fixedResults = agentOutput.results.filter((r) => r.fixed);
-				const hasFixedResults = fixedResults.length > 0;
 
 				let commitSha = "";
 				let pushError: Error | null = null;
 
-				if (hasFixedResults) {
-					// Step 5: Write modified files
+				if (fixedResults.length > 0) {
 					for (const result of fixedResults) {
 						for (const filePath of result.filesModified) {
 							const destPath = `${repoDir}/${filePath}`;
@@ -104,52 +91,43 @@ export function createPatchApplier(deps: PatchApplierDeps) {
 						}
 					}
 
-					// Step 6: Stage all changes
 					await deps.exec("git add -A", { cwd: repoDir });
 
-					// Step 7: Commit
 					await deps.exec(`git commit -m "fix: apply review bot suggestions"`, {
 						cwd: repoDir,
 					});
 
-					// Step 8: Get commit SHA
 					const rawSha = await deps.exec("git rev-parse HEAD", {
 						cwd: repoDir,
 					});
 					commitSha = rawSha.trim();
 
-					// Step 9: Push with retry logic
 					try {
 						await deps.exec(`git push origin ${shellQuote(branch)}`, {
 							cwd: repoDir,
 						});
 					} catch (firstPushErr) {
 						if (isNonFastForwardError(firstPushErr)) {
-							// Try rebase and retry push
 							try {
 								await deps.exec("git pull --rebase", { cwd: repoDir });
 								await deps.exec(`git push origin ${shellQuote(branch)}`, {
 									cwd: repoDir,
 								});
+								const newSha = await deps.exec("git rev-parse HEAD", {
+									cwd: repoDir,
+								});
+								commitSha = newSha.trim();
 							} catch (rebaseOrRetryErr) {
-								pushError =
-									rebaseOrRetryErr instanceof Error
-										? rebaseOrRetryErr
-										: new Error(String(rebaseOrRetryErr));
+								pushError = toError(rebaseOrRetryErr);
 							}
 						} else if (isPermissionError(firstPushErr)) {
-							pushError =
-								firstPushErr instanceof Error
-									? firstPushErr
-									: new Error(String(firstPushErr));
+							pushError = toError(firstPushErr);
 						} else {
-							// Unknown push error — rethrow
 							throw firstPushErr;
 						}
 					}
 				}
 
-				// Step 10: Build replies
 				const replies: CommentReply[] = agentOutput.results.map((result) => {
 					if (!result.fixed) {
 						return {
@@ -158,27 +136,19 @@ export function createPatchApplier(deps: PatchApplierDeps) {
 						};
 					}
 
-					// Fixed result — check push outcome
 					if (pushError !== null) {
-						const errMsg = pushError.message.toLowerCase();
-						if (
-							errMsg.includes("permission") ||
-							errMsg.includes("denied") ||
-							isFork
-						) {
+						if (isPermissionError(pushError) || isFork) {
 							return {
 								commentId: result.commentId,
 								body: `Could not push the fix: this PR is from a fork and the bot does not have push permission to the fork branch. Please apply the suggested changes manually.`,
 							};
 						}
-						// Conflict / rebase failure
 						return {
 							commentId: result.commentId,
 							body: `Could not push the fix: a rebase conflict occurred while syncing with the remote branch. Please resolve the conflict manually and push. Error: ${pushError.message}`,
 						};
 					}
 
-					// Push succeeded
 					return {
 						commentId: result.commentId,
 						body: `Fix applied in commit \`${commitSha}\`: ${result.description}`,

@@ -1,8 +1,3 @@
-// ---------------------------------------------------------------------------
-// Shared types for the GitHub PR Companion gateway
-// ---------------------------------------------------------------------------
-
-/** A single inline review comment from GitHub */
 export interface ReviewComment {
 	id: number;
 	path: string;
@@ -54,7 +49,7 @@ export type AuthMode =
 /** Resolved token ready for API calls */
 export interface ResolvedToken {
 	token: string;
-	/** For GitHub App: "x-access-token". For PAT: the PAT itself */
+	/** Authorization header value, formatted as "token {value}" */
 	authHeader: string;
 }
 
@@ -68,13 +63,6 @@ export interface WebhookHandlerDeps {
 /** Dependencies for the GitHub client */
 export interface GitHubClientDeps {
 	getToken: () => Promise<ResolvedToken>;
-}
-
-/** A fetched page of review comments */
-export interface ReviewCommentsPage {
-	comments: ReviewComment[];
-	hasNextPage: boolean;
-	nextUrl: string | null;
 }
 
 /** Reply to post on a comment */
