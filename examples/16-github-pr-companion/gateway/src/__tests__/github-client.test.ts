@@ -180,7 +180,7 @@ describe("fetchReviewComments", () => {
 		const comments = await client.fetchReviewComments("acme", "myrepo", 7, 999);
 
 		expect(comments).toHaveLength(3);
-		expect(comments.map((c) => c.id)).toEqual([1, 2, 3]);
+		expect(comments.map((c: { id: number }) => c.id)).toEqual([1, 2, 3]);
 	});
 
 	test("sets Authorization header from token provider", async () => {

@@ -29,12 +29,16 @@ async function computeSignature(
 ): Promise<string> {
 	const key = await crypto.subtle.importKey(
 		"raw",
-		new TextEncoder().encode(secret),
+		encode(secret).buffer as ArrayBuffer,
 		{ name: "HMAC", hash: "SHA-256" },
 		false,
 		["sign"],
 	);
-	const sigBuffer = await crypto.subtle.sign("HMAC", key, rawBody);
+	const sigBuffer = await crypto.subtle.sign(
+		"HMAC",
+		key,
+		rawBody.buffer as ArrayBuffer,
+	);
 	const hex = Array.from(new Uint8Array(sigBuffer))
 		.map((b) => b.toString(16).padStart(2, "0"))
 		.join("");

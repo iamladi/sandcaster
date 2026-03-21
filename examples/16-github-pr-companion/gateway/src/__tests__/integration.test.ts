@@ -1,6 +1,5 @@
 import type { SandcasterEvent } from "@sandcaster/core";
-import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { AgentOutput, AuthMode } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -13,12 +12,6 @@ import { createApp } from "../index.js";
 // ---------------------------------------------------------------------------
 // MSW server — mocks GitHub API calls made during pipeline processing
 // ---------------------------------------------------------------------------
-
-const server = setupServer();
-
-beforeAll(() => server.listen({ onUnhandledRequest: "warn" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
 
 // ---------------------------------------------------------------------------
 // Helpers
