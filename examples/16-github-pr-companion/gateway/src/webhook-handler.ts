@@ -4,7 +4,7 @@ import type {
 	WebhookHandlerDeps,
 } from "./types.js";
 
-interface DeliveryTracker {
+export interface DeliveryTracker {
 	tryAcquire(deliveryId: string): boolean;
 	markCompleted(deliveryId: string): void;
 	markFailed(deliveryId: string): void;
@@ -31,13 +31,17 @@ export async function verifySignature(
 
 	const key = await crypto.subtle.importKey(
 		"raw",
-		new TextEncoder().encode(secret),
+		new TextEncoder().encode(secret).buffer as ArrayBuffer,
 		{ name: "HMAC", hash: "SHA-256" },
 		false,
 		["sign"],
 	);
 
-	const sig = await crypto.subtle.sign("HMAC", key, rawBody);
+	const sig = await crypto.subtle.sign(
+		"HMAC",
+		key,
+		rawBody.buffer as ArrayBuffer,
+	);
 
 	const expectedHex = Array.from(new Uint8Array(sig))
 		.map((b) => b.toString(16).padStart(2, "0"))

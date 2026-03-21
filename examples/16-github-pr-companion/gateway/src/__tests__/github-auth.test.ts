@@ -141,7 +141,9 @@ describe("createTokenProvider (App mode)", () => {
 	let installationId: string;
 
 	beforeAll(async () => {
-		const { privateKey } = await generateKeyPair("RS256");
+		const { privateKey } = await generateKeyPair("RS256", {
+			extractable: true,
+		});
 		// Export to PEM so the implementation can import it as-is
 		const { exportPKCS8 } = await import("jose");
 		privateKeyPem = await exportPKCS8(privateKey);

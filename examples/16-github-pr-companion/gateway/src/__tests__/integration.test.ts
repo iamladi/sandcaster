@@ -6,7 +6,6 @@ import type { AgentOutput, AuthMode } from "../types.js";
 // createApp — dynamically imported so the module doesn't need to exist yet
 // ---------------------------------------------------------------------------
 
-// @ts-expect-error — implementation file does not exist yet (TDD)
 import { createApp } from "../index.js";
 
 // ---------------------------------------------------------------------------
@@ -89,16 +88,19 @@ function buildWebhookPayload(
 				repo: {
 					full_name: "owner/repo",
 					clone_url: "https://github.com/owner/repo.git",
+					owner: { login: "owner" },
+					name: "repo",
 				},
 			},
 			base: {
 				repo: {
 					full_name: "owner/repo",
 					clone_url: "https://github.com/owner/repo.git",
+					owner: { login: "owner" },
+					name: "repo",
 				},
 			},
 		},
-		repository: { owner: { login: "owner" }, name: "repo" },
 		sender: { login: senderLogin },
 	};
 }
