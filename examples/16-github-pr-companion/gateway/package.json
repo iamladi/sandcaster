@@ -1,0 +1,24 @@
+{
+	"name": "@sandcaster/example-pr-companion-gateway",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"main": "./dist/index.js",
+	"scripts": {
+		"dev": "bun run src/index.ts",
+		"build": "tsc",
+		"start": "bun run dist/index.js",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.19.11",
+		"@sandcaster/core": "workspace:*",
+		"hono": "^4.12.7",
+		"jose": "^6.0.11"
+	},
+	"devDependencies": {
+		"@sandcaster/ts-config": "workspace:*",
+		"msw": "^2.8.4",
+		"vitest": "^4.0.0"
+	}
+}

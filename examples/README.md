@@ -27,6 +27,7 @@ cd apps/cli && bun link   # registers `sandcaster` globally (from monorepo)
 | 13 | [generate-api-docs](13-generate-api-docs/) | Generate OpenAPI spec from source code | `E2B_API_KEY`, `OPENAI_API_KEY` |
 | 14 | [onboard-to-codebase](14-onboard-to-codebase/) | Produce architecture overview of a codebase | `E2B_API_KEY`, `OPENAI_API_KEY` |
 | 15 | [chat-bot](15-chat-bot/) | Chat bot with Slack/Discord/Telegram + HTTP gateway | `E2B_API_KEY`, `ANTHROPIC_API_KEY`, platform tokens |
+| 16 | [github-pr-companion](16-github-pr-companion/) | Auto-fix review bot comments on PRs + HTTP gateway | `E2B_API_KEY`, `OPENAI_API_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_TOKEN` |
 
 ## Running an example
 

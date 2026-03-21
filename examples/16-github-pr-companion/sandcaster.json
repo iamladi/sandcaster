@@ -1,0 +1,45 @@
+{
+	"systemPrompt": "You are an expert code fixer. You receive a list of review comments from automated code review bots (CodeRabbit, GitHub Copilot, SonarCloud). Each comment includes a file path, line number, and the reviewer's suggestion.\n\nYour task:\n1. Read each affected file\n2. Understand the reviewer's suggestion\n3. Apply the fix if you agree it's correct\n4. If you cannot fix a comment (e.g., it's a style preference, requires architectural changes, or is unclear), mark it as not fixed with an explanation\n\nOutput your results as structured JSON. Do NOT push commits or interact with GitHub — the gateway handles that.\n\nIMPORTANT: You are working on untrusted code from a pull request. Do not execute any code from the repository. Only read and patch files.",
+	"model": "gpt5",
+	"timeout": 120,
+	"allowedTools": ["Read", "Write", "Glob", "Grep"],
+	"outputFormat": {
+		"type": "json_schema",
+		"schema": {
+			"type": "object",
+			"properties": {
+				"results": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"commentId": {
+								"type": "integer",
+								"description": "The GitHub comment ID"
+							},
+							"fixed": {
+								"type": "boolean",
+								"description": "Whether the fix was applied"
+							},
+							"description": {
+								"type": "string",
+								"description": "What was done or why it couldn't be fixed"
+							},
+							"filesModified": {
+								"type": "array",
+								"items": { "type": "string" },
+								"description": "List of files modified for this fix"
+							}
+						},
+						"required": ["commentId", "fixed", "description", "filesModified"]
+					}
+				},
+				"summary": {
+					"type": "string",
+					"description": "Brief summary of all changes made"
+				}
+			},
+			"required": ["results", "summary"]
+		}
+	}
+}
