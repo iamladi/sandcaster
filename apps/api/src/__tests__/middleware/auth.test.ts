@@ -38,6 +38,20 @@ describe("bearer auth middleware", () => {
 		const res = await app.request("/runs");
 		expect(res.status).toBe(401);
 	});
+
+	test("throws when apiKey is shorter than MIN_KEY_LENGTH", () => {
+		expect(() => createApp({ apiKey: "too-short" })).toThrow(
+			/at least 32 characters/,
+		);
+	});
+
+	test("throws when apiKey is 1 character", () => {
+		expect(() => createApp({ apiKey: "x" })).toThrow(/at least 32 characters/);
+	});
+
+	test("accepts apiKey exactly at MIN_KEY_LENGTH", () => {
+		expect(() => createApp({ apiKey: "a".repeat(32) })).not.toThrow();
+	});
 });
 
 describe("request ID middleware", () => {
