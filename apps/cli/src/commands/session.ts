@@ -126,6 +126,7 @@ export async function executeSessionAttach(
 			}
 		}
 	} finally {
+		await reader.cancel();
 		reader.releaseLock();
 	}
 }
