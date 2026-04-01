@@ -140,5 +140,53 @@ describe("SessionPool", () => {
 			expect(release).toBeTypeOf("function");
 			release();
 		});
+
+		test("removeBySessionId does not break mutual exclusion for queued waiters", async () => {
+			const pool = new SessionPool();
+			const threadKey = "slack:C123:1234567890.000";
+			const sessionId = "sess-test";
+			pool.register(threadKey, sessionId);
+
+			// M1 holds mutex
+			const release1 = await pool.acquireMutex(threadKey);
+
+			// M2 waits on the same mutex
+			let m2Started = false;
+			const m2Promise = pool.acquireMutex(threadKey).then((release) => {
+				m2Started = true;
+				return release;
+			});
+
+			// Let M2's acquire() enqueue
+			await Promise.resolve();
+			expect(m2Started).toBe(false);
+
+			// Remove session — must NOT delete the mutex
+			pool.removeBySessionId(sessionId);
+
+			// M3 arrives — should wait on the SAME mutex, not get a new one
+			let m3Started = false;
+			const m3Promise = pool.acquireMutex(threadKey).then((release) => {
+				m3Started = true;
+				return release;
+			});
+
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// M3 should NOT have started — M1 still holds the mutex
+			expect(m3Started).toBe(false);
+
+			// Release M1 — M2 should proceed, M3 still waiting
+			release1();
+			const release2 = await m2Promise;
+			expect(m2Started).toBe(true);
+			expect(m3Started).toBe(false);
+
+			release2();
+			const release3 = await m3Promise;
+			expect(m3Started).toBe(true);
+			release3();
+		});
 	});
 });
