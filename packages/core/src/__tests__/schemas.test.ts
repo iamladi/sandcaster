@@ -119,6 +119,20 @@ describe("QueryRequestSchema", () => {
 		expect(result.success).toBe(false);
 	});
 
+	it("rejects files with paths that normalize to the same target", () => {
+		const result = QueryRequestSchema.safeParse({
+			prompt: "test",
+			files: {
+				"config.json": "first",
+				"./config.json": "second",
+			},
+		});
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues[0].message).toContain("config.json");
+		}
+	});
+
 	it("rejects invalid extra agent names (spaces/special chars)", () => {
 		const result = QueryRequestSchema.safeParse({
 			prompt: "test",

@@ -98,6 +98,21 @@ const filesSchema = z
 			}
 		}
 
+		// Detect paths that normalize to the same target
+		const seen = new Map<string, string>();
+		for (const path of keys) {
+			const norm = normalizePosixPath(path) as string;
+			const prev = seen.get(norm);
+			if (prev !== undefined) {
+				ctx.addIssue({
+					code: "custom",
+					message: `Paths "${prev}" and "${path}" both resolve to "${norm}". Remove the duplicate.`,
+				});
+				return;
+			}
+			seen.set(norm, path);
+		}
+
 		if (keys.length > 20) {
 			ctx.addIssue({
 				code: "custom",
