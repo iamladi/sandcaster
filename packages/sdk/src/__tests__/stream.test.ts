@@ -175,6 +175,40 @@ describe("parseSSEStream", () => {
 		expect(collected[0]).toEqual({ type: "system", content: "first" });
 	});
 
+	it("cancels the underlying stream when breaking early from iteration", async () => {
+		const encoder = new TextEncoder();
+		const cancelPromise = new Promise<void>((resolve) => {
+			const body = new ReadableStream<Uint8Array>({
+				pull(ctrl) {
+					ctrl.enqueue(
+						encoder.encode(
+							`data: ${JSON.stringify({ type: "system", content: "event" })}\n\n`,
+						),
+					);
+				},
+				cancel() {
+					resolve();
+				},
+			});
+
+			(async () => {
+				for await (const _event of parseSSEStream(body)) {
+					break;
+				}
+			})();
+		});
+
+		// Cancel should propagate within a reasonable time
+		await expect(
+			Promise.race([
+				cancelPromise,
+				new Promise((_, reject) =>
+					setTimeout(() => reject(new Error("stream not cancelled")), 1000),
+				),
+			]),
+		).resolves.toBeUndefined();
+	});
+
 	it("yields error events rather than throwing them (FR-2)", async () => {
 		const body = createSSEStream({
 			type: "error",
