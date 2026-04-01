@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { z } from "zod";
 import type { SandcasterConfig } from "./schemas.js";
 import { SandcasterConfigSchema } from "./schemas.js";
 
@@ -21,8 +22,35 @@ const KNOWN_FIELDS = new Set(Object.keys(SandcasterConfigSchema.shape));
 // ---------------------------------------------------------------------------
 
 /**
+ * Unwrap ZodOptional to get the inner schema (Zod v4 introspection).
+ */
+function unwrapOptional(schema: z.ZodTypeAny): z.ZodTypeAny {
+	// biome-ignore lint/suspicious/noExplicitAny: Zod v4 internal introspection
+	const def = (schema as any)._zod?.def;
+	if (def?.type === "optional") {
+		return def.innerType;
+	}
+	return schema;
+}
+
+/**
+ * If the schema is an object type, return its shape. Otherwise null.
+ */
+function getObjectShape(
+	schema: z.ZodTypeAny,
+): Record<string, z.ZodTypeAny> | null {
+	// biome-ignore lint/suspicious/noExplicitAny: Zod v4 internal introspection
+	const def = (schema as any)._zod?.def;
+	if (def?.type === "object" && "shape" in schema) {
+		return (schema as unknown as { shape: Record<string, z.ZodTypeAny> }).shape;
+	}
+	return null;
+}
+
+/**
  * Validates a single field value against its Zod schema shape.
- * Returns the parsed value if valid, or undefined + a warning if not.
+ * For nested object fields, validates sub-fields individually so one invalid
+ * sub-field doesn't discard valid siblings.
  */
 function validateField(
 	key: string,
@@ -39,6 +67,44 @@ function validateField(
 	if (result.success) {
 		return { ok: true, value: result.data };
 	}
+
+	// For nested objects, try partial validation of sub-fields
+	const inner = unwrapOptional(fieldSchema);
+	const shape = getObjectShape(inner);
+	if (
+		shape &&
+		value !== null &&
+		typeof value === "object" &&
+		!Array.isArray(value)
+	) {
+		const partial: Record<string, unknown> = {};
+		for (const [subKey, subValue] of Object.entries(
+			value as Record<string, unknown>,
+		)) {
+			const subSchema = shape[subKey];
+			if (!subSchema) {
+				console.warn(
+					`sandcaster.json: field "${key}.${subKey}" unknown — ignoring`,
+				);
+				continue;
+			}
+			const subResult = subSchema.safeParse(subValue);
+			if (subResult.success) {
+				partial[subKey] = subResult.data;
+			} else {
+				const reason = subResult.error.issues[0]?.message ?? "invalid value";
+				console.warn(
+					`sandcaster.json: field "${key}.${subKey}" invalid (${reason}) — ignoring`,
+				);
+			}
+		}
+		// Re-parse the partial object so defaults fill in
+		const reparsed = fieldSchema.safeParse(partial);
+		if (reparsed.success) {
+			return { ok: true, value: reparsed.data };
+		}
+	}
+
 	const reason = result.error.issues[0]?.message ?? "invalid value";
 	return { ok: false, reason };
 }

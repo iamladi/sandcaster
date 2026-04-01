@@ -198,6 +198,45 @@ describe("loadConfig", () => {
 	});
 
 	// -------------------------------------------------------------------------
+	// Nested object partial tolerance
+	// -------------------------------------------------------------------------
+
+	it("strips invalid nested sub-field but preserves valid siblings in composite", async () => {
+		writeConfig(tmpDir, {
+			composite: {
+				maxSandboxes: 0, // invalid: gte(1)
+				allowedProviders: ["e2b"], // valid
+			},
+		});
+		const loadConfig = await getLoadConfig();
+		const result = loadConfig(tmpDir);
+
+		// allowedProviders should be preserved, maxSandboxes stripped (gets default)
+		expect(result?.composite?.allowedProviders).toEqual(["e2b"]);
+		expect(result?.composite?.maxSandboxes).toBe(3); // default
+		expect(warnSpy).toHaveBeenCalled();
+		const warnMsg = warnSpy.mock.calls
+			.map((args) => String(args[0]))
+			.join("\n");
+		expect(warnMsg).toContain("maxSandboxes");
+	});
+
+	it("preserves entire composite when all sub-fields are valid", async () => {
+		writeConfig(tmpDir, {
+			composite: {
+				maxSandboxes: 5,
+				allowedProviders: ["e2b"],
+			},
+		});
+		const loadConfig = await getLoadConfig();
+		const result = loadConfig(tmpDir);
+
+		expect(result?.composite?.maxSandboxes).toBe(5);
+		expect(result?.composite?.allowedProviders).toEqual(["e2b"]);
+		expect(warnSpy).not.toHaveBeenCalled();
+	});
+
+	// -------------------------------------------------------------------------
 	// Cache cleared when file is deleted
 	// -------------------------------------------------------------------------
 
