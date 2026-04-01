@@ -31,7 +31,7 @@ export class SessionPool {
 			this.sessionToThread.delete(sessionId);
 		}
 		this.sessions.delete(threadKey);
-		this.mutexes.delete(threadKey);
+		// Do NOT delete mutex — it may be held or have waiters
 	}
 
 	/** Remove mapping by session ID (used for expiry callback) */
@@ -39,7 +39,7 @@ export class SessionPool {
 		const threadKey = this.sessionToThread.get(sessionId);
 		if (threadKey !== undefined) {
 			this.sessions.delete(threadKey);
-			this.mutexes.delete(threadKey);
+			// Do NOT delete mutex — it may be held or have waiters
 			this.sessionToThread.delete(sessionId);
 		}
 	}
