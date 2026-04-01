@@ -57,8 +57,8 @@ function isGlob(pattern: string): boolean {
  * and `?` (match single char, not `/`).
  */
 function globToRegex(pattern: string): RegExp {
-	// Normalize to forward slashes
-	const normalized = pattern.replace(/\\/g, "/");
+	// Normalize to forward slashes and collapse consecutive **/ to prevent ReDoS
+	const normalized = pattern.replace(/\\/g, "/").replace(/(\*\*\/)+/g, "**/");
 	let regexStr = "";
 
 	let i = 0;

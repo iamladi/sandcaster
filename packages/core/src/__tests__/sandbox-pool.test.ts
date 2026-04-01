@@ -608,6 +608,44 @@ describe("SandboxPool — transferFiles", () => {
 		expect(result.transferred).toContain("b.sql");
 		expect(result.transferred).not.toContain("c.txt");
 	});
+
+	it("handles consecutive globstars without catastrophic backtracking", async () => {
+		const primary = makeFakeInstance();
+		const s1 = makeFakeInstance();
+		const s2 = makeFakeInstance();
+		s1.files.read = vi.fn().mockResolvedValue("content");
+		s2.files.write = vi.fn().mockResolvedValue(undefined);
+		// Generate a realistic file listing
+		const paths = Array.from(
+			{ length: 100 },
+			(_, i) => `src/deep/nested/dir/file${i}.js`,
+		);
+		paths.push("README.md", "package.json");
+		s1.commands.run = vi.fn().mockResolvedValue({
+			stdout: paths.join("\n"),
+			stderr: "",
+			exitCode: 0,
+		});
+
+		let callCount = 0;
+		const factory: SandboxFactory = vi.fn().mockImplementation(async () => {
+			return callCount++ === 0 ? s1 : s2;
+		});
+
+		const pool = new SandboxPool(primary, makeConfig(), factory);
+		await pool.spawn("src", "e2b");
+		await pool.spawn("dst", "e2b");
+
+		// Pattern with consecutive globstars — should behave like a single **
+		const start = performance.now();
+		const result = await pool.transferFiles("src", "dst", ["**/**/**/*.js"]);
+		const elapsed = performance.now() - start;
+
+		// Must match .js files and complete quickly (< 500ms, not seconds)
+		expect(result.transferred.length).toBe(100);
+		expect(result.transferred).not.toContain("README.md");
+		expect(elapsed).toBeLessThan(500);
+	});
 });
 
 // ---------------------------------------------------------------------------
