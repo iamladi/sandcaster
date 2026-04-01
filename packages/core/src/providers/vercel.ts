@@ -204,9 +204,8 @@ export function createVercelProvider(): SandboxProvider {
 							cmd: string,
 							opts?: CommandOptions,
 						): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-							// Vercel SDK uses fork/exec — split command into binary + args
-							const parts = cmd.split(/\s+/);
-							const command = await sbx.runCommand(parts[0], parts.slice(1));
+							// Wrap with sh -c so shell operators (pipes, redirects, quotes) work
+							const command = await sbx.runCommand("sh", ["-c", cmd]);
 							const { stdout, stderr } = await collectLogs(command.logs, opts);
 							return { stdout, stderr, exitCode: command.exitCode };
 						},

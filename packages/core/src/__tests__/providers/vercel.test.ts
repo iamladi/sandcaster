@@ -389,10 +389,29 @@ describe("createVercelProvider", () => {
 		if (!result.ok) throw new Error("unreachable");
 
 		const cmdRes = await result.instance.commands.run("echo hello");
-		expect(runCommand).toHaveBeenCalledWith("echo", ["hello"]);
+		expect(runCommand).toHaveBeenCalledWith("sh", ["-c", "echo hello"]);
 		expect(cmdRes.exitCode).toBe(0);
 		expect(cmdRes.stdout).toBe("hello\n");
 		expect(cmdRes.stderr).toBe("warn\n");
+	});
+
+	it("commands.run passes commands with pipes/quotes through sh -c", async () => {
+		const cmdResult = makeCommandResult({
+			exitCode: 0,
+			logs: [{ stream: "stdout", data: "file1.txt\n" }],
+		});
+		const runCommand = vi.fn().mockResolvedValue(cmdResult);
+		const fakeSbx = makeVercelSandbox({ runCommand });
+		mockSandboxCreate.mockResolvedValue(fakeSbx);
+
+		const provider = createVercelProvider();
+		const result = await provider.create({});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const cmd = 'find /dir -type f | sed "s|/dir/||"';
+		await result.instance.commands.run(cmd);
+		expect(runCommand).toHaveBeenCalledWith("sh", ["-c", cmd]);
 	});
 
 	it("commands.run returns non-zero exit code without throwing", async () => {
