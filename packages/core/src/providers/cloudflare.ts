@@ -214,8 +214,14 @@ export function createCloudflareProvider(): SandboxProvider {
 									: "SANDBOX_ERROR",
 							);
 						}
-						const { content } = (await resp.json()) as { content: string };
+						const { content, encoding } = (await resp.json()) as {
+							content: string;
+							encoding?: string;
+						};
 						if (opts?.format === "bytes") {
+							if (encoding === "base64") {
+								return new Uint8Array(Buffer.from(content, "base64"));
+							}
 							return new TextEncoder().encode(content);
 						}
 						return content;

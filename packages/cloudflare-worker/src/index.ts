@@ -102,7 +102,10 @@ app.get("/sandbox/:id/files/read", async (c) => {
 	const sandbox = getSandbox(c.env.Sandbox, sessionId);
 	const file = await sandbox.readFile(path);
 
-	return c.json({ content: file.content });
+	return c.json({
+		content: file.content,
+		encoding: file.encoding,
+	});
 });
 
 // ---------------------------------------------------------------------------
