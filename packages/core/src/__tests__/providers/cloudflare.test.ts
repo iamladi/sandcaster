@@ -382,6 +382,29 @@ describe("createCloudflareProvider", () => {
 		expect(content).toBeInstanceOf(Uint8Array);
 	});
 
+	it("files.read decodes base64 content correctly for binary files", async () => {
+		setupSuccessfulCreate();
+		const originalBytes = new Uint8Array([0, 255, 128, 42, 1]);
+		const base64Content = Buffer.from(originalBytes).toString("base64");
+		mockFetch.mockResolvedValueOnce(
+			makeJsonResponse({ content: base64Content, encoding: "base64" }),
+		);
+
+		const provider = createCloudflareProvider();
+		const result = await provider.create({
+			metadata: { workerUrl: WORKER_URL },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const content = await result.instance.files.read("/workspace/binary.bin", {
+			format: "bytes",
+		});
+
+		expect(content).toBeInstanceOf(Uint8Array);
+		expect(content).toEqual(originalBytes);
+	});
+
 	// -------------------------------------------------------------------------
 	// commands.run
 	// -------------------------------------------------------------------------
