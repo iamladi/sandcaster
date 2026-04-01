@@ -891,4 +891,59 @@ describe("SessionManager", () => {
 		const active = manager.getActiveSession(sessionId);
 		expect(active!.session.status).not.toBe("running");
 	});
+
+	// -------------------------------------------------------------------------
+	// Tool call events stored in session history
+	// -------------------------------------------------------------------------
+
+	it("stores tool_use and tool_result events in session history with isToolCall flag", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+		const agentEvents: SandcasterEvent[] = [
+			{ type: "tool_use", toolName: "bash", content: "ls -la" },
+			{
+				type: "tool_result",
+				toolName: "bash",
+				content: "file1.txt\nfile2.txt",
+				isError: false,
+			},
+			{ type: "assistant", content: "I found two files." },
+			{
+				type: "result",
+				content: "Done",
+				costUsd: 0.01,
+				numTurns: 1,
+				durationSecs: 1,
+			},
+		];
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: createFakeRunAgent(agentEvents),
+		});
+
+		const { sessionId, events } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: "list files" }),
+		);
+		await collectEvents(events);
+
+		const activeSession = manager.getActiveSession(sessionId);
+		expect(activeSession).toBeDefined();
+
+		const history = activeSession!.history;
+		// Should have: user, tool_use, tool_result, assistant
+		expect(history.length).toBeGreaterThanOrEqual(4);
+
+		const toolUseTurn = history.find(
+			(t) => t.role === "assistant" && t.isToolCall,
+		);
+		const toolResultTurn = history.find(
+			(t) => t.role === "user" && t.isToolCall,
+		);
+
+		expect(toolUseTurn).toBeDefined();
+		expect(toolUseTurn!.content).toContain("bash");
+		expect(toolResultTurn).toBeDefined();
+		expect(toolResultTurn!.content).toContain("bash");
+	});
 });

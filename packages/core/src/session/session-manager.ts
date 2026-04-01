@@ -649,6 +649,28 @@ export class SessionManager {
 					if (event.type === "assistant") {
 						assistantContent += event.content;
 					}
+					if (event.type === "tool_use") {
+						addTurn(
+							activeSession.history,
+							{
+								role: "assistant",
+								content: `Tool call (${event.toolName}): ${event.content}`,
+								isToolCall: true,
+							},
+							maxHistoryTurns,
+						);
+					}
+					if (event.type === "tool_result") {
+						addTurn(
+							activeSession.history,
+							{
+								role: "user",
+								content: `Tool result (${event.toolName}): ${event.content}`,
+								isToolCall: true,
+							},
+							maxHistoryTurns,
+						);
+					}
 					if (event.type === "result") {
 						costUsd = event.costUsd;
 						numTurns = event.numTurns;
