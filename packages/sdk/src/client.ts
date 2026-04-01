@@ -62,6 +62,7 @@ export class SandcasterClient {
 				}
 
 				const cleanup = () => {
+					controller.abort();
 					self.#activeControllers.delete(controller);
 					if (abortHandler) {
 						options?.signal?.removeEventListener("abort", abortHandler);

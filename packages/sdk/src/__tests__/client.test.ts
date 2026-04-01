@@ -351,6 +351,45 @@ describe("SandcasterClient", () => {
 		});
 	});
 
+	describe("early break aborts fetch", () => {
+		it("aborts the underlying fetch when consumer breaks from for-await", async () => {
+			const encoder = new TextEncoder();
+			let pullCount = 0;
+
+			const body = new ReadableStream<Uint8Array>({
+				pull(ctrl) {
+					pullCount++;
+					ctrl.enqueue(
+						encoder.encode(
+							`data: ${JSON.stringify({ type: "system", content: `event-${pullCount}` })}\n\n`,
+						),
+					);
+					// Never close — stream keeps producing
+				},
+			});
+
+			let capturedSignal: AbortSignal | undefined;
+			fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+				capturedSignal = init.signal;
+				return Promise.resolve(
+					new Response(body, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				);
+			});
+
+			const client = new SandcasterClient({ baseUrl: "http://localhost:3000" });
+
+			for await (const _event of client.query({ prompt: "test" })) {
+				break; // early exit
+			}
+
+			// The abort signal should have been triggered by cleanup
+			expect(capturedSignal?.aborted).toBe(true);
+		});
+	});
+
 	describe("dispose (Symbol.asyncDispose)", () => {
 		it("aborts in-flight query() streams on dispose", async () => {
 			// Use a stream that never ends — we dispose before it finishes
