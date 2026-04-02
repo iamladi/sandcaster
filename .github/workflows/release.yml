@@ -62,18 +62,18 @@ jobs:
         if: steps.changesets.outputs.published == 'true'
         env:
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        run: bun run scripts/sync-changelog-to-web.ts
 
-          bun run scripts/sync-changelog-to-web.ts
-
-          git add apps/web/src/content/changelog/
-          git diff --staged --quiet && exit 0
-
-          git commit -m "docs: sync changelog to website"
-          git pull --rebase origin main
-          git push
+      - name: Create changelog PR
+        if: steps.changesets.outputs.published == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "docs: sync changelog to website"
+          branch: docs/sync-changelog
+          title: "docs: sync changelog to website"
+          body: "Auto-generated changelog entries from release."
+          add-paths: apps/web/src/content/changelog/
+          delete-branch: true
 
       - name: Trigger website deploy
         if: steps.changesets.outputs.published == 'true'
