@@ -646,6 +646,52 @@ describe("SandboxPool — transferFiles", () => {
 		expect(result.transferred).not.toContain("README.md");
 		expect(elapsed).toBeLessThan(500);
 	});
+
+	it("handles consecutive bare globstars without slashes (ReDoS prevention)", async () => {
+		const primary = makeFakeInstance();
+		const s1 = makeFakeInstance();
+		const s2 = makeFakeInstance();
+		s1.files.read = vi.fn().mockResolvedValue("content");
+		s2.files.write = vi.fn().mockResolvedValue(undefined);
+		// Generate file listing with many long non-matching paths to stress
+		// regex backtracking — consecutive `.*` quantifiers cause O(n^k) matching
+		// on strings that almost-but-don't-quite match
+		const paths = Array.from(
+			{ length: 50 },
+			(_, i) => `src/deep/nested/dir/file${i}.js`,
+		);
+		// Add long non-matching paths that trigger backtracking in unpatched regex
+		for (let i = 0; i < 50; i++) {
+			paths.push(`a/${"b/".repeat(30)}file${i}.txt`);
+		}
+		paths.push("README.md", "package.json");
+		s1.commands.run = vi.fn().mockResolvedValue({
+			stdout: paths.join("\n"),
+			stderr: "",
+			exitCode: 0,
+		});
+
+		let callCount = 0;
+		const factory: SandboxFactory = vi.fn().mockImplementation(async () => {
+			return callCount++ === 0 ? s1 : s2;
+		});
+
+		const pool = new SandboxPool(primary, makeConfig(), factory);
+		await pool.spawn("src", "e2b");
+		await pool.spawn("dst", "e2b");
+
+		// Pattern with consecutive bare ** (no slashes between them) — should
+		// collapse to a single ** and not cause catastrophic backtracking
+		const start = performance.now();
+		const result = await pool.transferFiles("src", "dst", ["******.js"]);
+		const elapsed = performance.now() - start;
+
+		// Must match .js files and complete quickly (< 500ms, not seconds)
+		expect(result.transferred.length).toBe(50);
+		expect(result.transferred).not.toContain("README.md");
+		expect(result.transferred).not.toContain("package.json");
+		expect(elapsed).toBeLessThan(500);
+	});
 });
 
 // ---------------------------------------------------------------------------
