@@ -15,7 +15,7 @@ publish_if_new() {
     echo "Skipping $name@$version (already published)"
   else
     echo "Publishing $name@$version..."
-    npm publish --access public "./$dir"
+    npm publish --access public --provenance "./$dir"
   fi
 }
 
