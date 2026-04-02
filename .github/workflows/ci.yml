@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -16,6 +19,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: biomejs/setup-biome@v2
       - run: biome ci .
 
@@ -27,6 +32,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -55,6 +61,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -77,6 +84,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -103,6 +111,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - name: Verify lockfile is up to date
         run: |
@@ -112,6 +122,17 @@ jobs:
             exit 1
           }
 
+  actions-lint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: rhysd/actionlint@v1
+      - uses: woodruffw/zizmor-action@v2
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -119,6 +140,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
         with:
           scan-args: |-
