@@ -132,6 +132,8 @@ jobs:
           persist-credentials: false
       - uses: rhysd/actionlint@v1.7.12
       - uses: zizmorcore/zizmor-action@v0.5.2
+        with:
+          config: .zizmor.yml
 
   security:
     name: Security Audit
