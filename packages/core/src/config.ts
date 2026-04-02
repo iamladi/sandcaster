@@ -48,9 +48,72 @@ function getObjectShape(
 }
 
 /**
+ * Recursively attempts partial validation of an object value against a Zod schema.
+ * Preserves valid sub-fields and drops invalid ones, recursing into nested objects.
+ */
+function partialValidateObject(
+	schema: z.ZodTypeAny,
+	value: Record<string, unknown>,
+	path: string,
+): Record<string, unknown> | null {
+	const inner = unwrapOptional(schema);
+	const shape = getObjectShape(inner);
+	if (!shape) return null;
+
+	const partial: Record<string, unknown> = {};
+	for (const [subKey, subValue] of Object.entries(value)) {
+		const subSchema = shape[subKey];
+		if (!subSchema) {
+			console.warn(
+				`sandcaster.json: field "${path}.${subKey}" unknown — ignoring`,
+			);
+			continue;
+		}
+		const subResult = subSchema.safeParse(subValue);
+		if (subResult.success) {
+			partial[subKey] = subResult.data;
+		} else if (
+			subValue !== null &&
+			typeof subValue === "object" &&
+			!Array.isArray(subValue)
+		) {
+			// Recurse into nested objects
+			const nested = partialValidateObject(
+				subSchema,
+				subValue as Record<string, unknown>,
+				`${path}.${subKey}`,
+			);
+			if (nested !== null) {
+				// Re-parse through the sub-schema so defaults fill in
+				const reparsed = subSchema.safeParse(nested);
+				if (reparsed.success) {
+					partial[subKey] = reparsed.data;
+				} else {
+					const reason = subResult.error.issues[0]?.message ?? "invalid value";
+					console.warn(
+						`sandcaster.json: field "${path}.${subKey}" invalid (${reason}) — ignoring`,
+					);
+				}
+			} else {
+				const reason = subResult.error.issues[0]?.message ?? "invalid value";
+				console.warn(
+					`sandcaster.json: field "${path}.${subKey}" invalid (${reason}) — ignoring`,
+				);
+			}
+		} else {
+			const reason = subResult.error.issues[0]?.message ?? "invalid value";
+			console.warn(
+				`sandcaster.json: field "${path}.${subKey}" invalid (${reason}) — ignoring`,
+			);
+		}
+	}
+	return partial;
+}
+
+/**
  * Validates a single field value against its Zod schema shape.
  * For nested object fields, validates sub-fields individually so one invalid
- * sub-field doesn't discard valid siblings.
+ * sub-field doesn't discard valid siblings — recursing into arbitrarily deep objects.
  */
 function validateField(
 	key: string,
@@ -68,40 +131,18 @@ function validateField(
 		return { ok: true, value: result.data };
 	}
 
-	// For nested objects, try partial validation of sub-fields
-	const inner = unwrapOptional(fieldSchema);
-	const shape = getObjectShape(inner);
-	if (
-		shape &&
-		value !== null &&
-		typeof value === "object" &&
-		!Array.isArray(value)
-	) {
-		const partial: Record<string, unknown> = {};
-		for (const [subKey, subValue] of Object.entries(
+	// For nested objects, try recursive partial validation
+	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+		const partial = partialValidateObject(
+			fieldSchema,
 			value as Record<string, unknown>,
-		)) {
-			const subSchema = shape[subKey];
-			if (!subSchema) {
-				console.warn(
-					`sandcaster.json: field "${key}.${subKey}" unknown — ignoring`,
-				);
-				continue;
+			key,
+		);
+		if (partial !== null) {
+			const reparsed = fieldSchema.safeParse(partial);
+			if (reparsed.success) {
+				return { ok: true, value: reparsed.data };
 			}
-			const subResult = subSchema.safeParse(subValue);
-			if (subResult.success) {
-				partial[subKey] = subResult.data;
-			} else {
-				const reason = subResult.error.issues[0]?.message ?? "invalid value";
-				console.warn(
-					`sandcaster.json: field "${key}.${subKey}" invalid (${reason}) — ignoring`,
-				);
-			}
-		}
-		// Re-parse the partial object so defaults fill in
-		const reparsed = fieldSchema.safeParse(partial);
-		if (reparsed.success) {
-			return { ok: true, value: reparsed.data };
 		}
 	}
 

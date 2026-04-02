@@ -221,6 +221,33 @@ describe("loadConfig", () => {
 		expect(warnMsg).toContain("maxSandboxes");
 	});
 
+	it("recursively preserves valid grandchild fields when a sibling grandchild is invalid", async () => {
+		writeConfig(tmpDir, {
+			branching: {
+				enabled: true,
+				count: 3,
+				evaluator: { type: "llm-judge", prompt: 123 },
+			},
+		});
+		const loadConfig = await getLoadConfig();
+		const result = loadConfig(tmpDir);
+
+		// branching top-level siblings preserved
+		expect(result?.branching?.enabled).toBe(true);
+		expect(result?.branching?.count).toBe(3);
+
+		// evaluator.type preserved, evaluator.prompt stripped
+		expect(result?.branching?.evaluator?.type).toBe("llm-judge");
+		expect(result?.branching?.evaluator?.prompt).toBeUndefined();
+
+		// A warning should have been emitted for the invalid nested field
+		expect(warnSpy).toHaveBeenCalled();
+		const allWarnings = warnSpy.mock.calls
+			.map((args) => String(args[0]))
+			.join("\n");
+		expect(allWarnings).toContain("prompt");
+	});
+
 	it("preserves entire composite when all sub-fields are valid", async () => {
 		writeConfig(tmpDir, {
 			composite: {
