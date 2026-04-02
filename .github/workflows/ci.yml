@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   lint:
     name: Lint & Format
@@ -12,6 +19,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: biomejs/setup-biome@v2
       - run: biome ci .
 
@@ -21,6 +30,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -30,10 +42,16 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-
+          key: turbo-check-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: turbo-check-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bunx turbo check-types
+      - name: Run typecheck (affected only on PRs)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            bunx turbo run check-types --filter='...[origin/main...HEAD]'
+          else
+            bunx turbo run check-types
+          fi
 
   build:
     name: Build
@@ -41,6 +59,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -50,8 +71,8 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-
+          key: turbo-build-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: turbo-build-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bunx turbo build
 
@@ -61,6 +82,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
@@ -70,7 +94,56 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-
+          key: turbo-test-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: turbo-test-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bunx turbo test
+      - name: Run tests (affected only on PRs)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            bunx turbo run test --filter='...[origin/main...HEAD]'
+          else
+            bunx turbo run test
+          fi
+
+  lockfile:
+    name: Lockfile Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - name: Verify lockfile is up to date
+        run: |
+          bun install --frozen-lockfile
+          git diff --exit-code bun.lock || {
+            echo "::error::bun.lock is out of sync with package.json files. Run 'bun install' and commit the lockfile."
+            exit 1
+          }
+
+  actions-lint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: rhysd/actionlint@v1.7.12
+      - uses: zizmorcore/zizmor-action@v0.5.2
+        with:
+          config: .zizmor.yml
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.3
+        with:
+          scan-args: |-
+            --lockfile=bun.lock

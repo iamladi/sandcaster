@@ -11,12 +11,15 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
+    environment: cloudflare
     timeout-minutes: 10
     permissions:
       contents: read
       deployments: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
       - uses: actions/cache@v5
         with:
