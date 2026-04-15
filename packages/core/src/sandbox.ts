@@ -574,6 +574,16 @@ export async function* runAgentOnInstance(
 	const timeoutMs = timeoutSecs * 1000;
 	const envs = buildEnvs(request);
 
+	// Check if already aborted before starting
+	if (_signal?.aborted) {
+		yield {
+			type: "error",
+			content: "Aborted",
+			code: "ABORTED",
+		} satisfies SandcasterEvent;
+		return;
+	}
+
 	const runnerDir = `${instance.workDir}/.sandcaster`;
 	const runnerPath = `${runnerDir}/runner.mjs`;
 	const configPath = `${runnerDir}/agent_config.json`;
@@ -617,6 +627,12 @@ export async function* runAgentOnInstance(
 		}
 	};
 
+	// Set up abort listener to destroy the stream
+	const onAbort = () => {
+		stream.destroy(new Error("Aborted"));
+	};
+	_signal?.addEventListener("abort", onAbort, { once: true });
+
 	const runPromise = instance.commands
 		.run(`node ${runnerPath} ${configPath}`, {
 			timeoutMs: timeoutMs * 6,
@@ -653,16 +669,26 @@ export async function* runAgentOnInstance(
 			}
 		}
 	} catch (streamErr) {
-		const errMsg =
-			streamErr instanceof Error ? streamErr.message : String(streamErr);
-		const detail = stderrBuffer.trim()
-			? `${errMsg}\nstderr: ${stderrBuffer.trim()}`
-			: errMsg;
-		yield {
-			type: "error",
-			content: redactApiKeys(`Runner error: ${detail}`, envs),
-			code: "RUNNER_ERROR",
-		} satisfies SandcasterEvent;
+		if (_signal?.aborted) {
+			yield {
+				type: "error",
+				content: "Aborted",
+				code: "ABORTED",
+			} satisfies SandcasterEvent;
+		} else {
+			const errMsg =
+				streamErr instanceof Error ? streamErr.message : String(streamErr);
+			const detail = stderrBuffer.trim()
+				? `${errMsg}\nstderr: ${stderrBuffer.trim()}`
+				: errMsg;
+			yield {
+				type: "error",
+				content: redactApiKeys(`Runner error: ${detail}`, envs),
+				code: "RUNNER_ERROR",
+			} satisfies SandcasterEvent;
+		}
+	} finally {
+		_signal?.removeEventListener("abort", onAbort);
 	}
 
 	await runPromise.catch(() => {});

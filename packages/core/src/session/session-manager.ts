@@ -379,7 +379,19 @@ export class SessionManager {
 			activeSession.abortController.abort();
 		}
 
-		// Wait for mutex
+		// Kill the sandbox instance BEFORE acquiring the mutex.
+		// This terminates the running command, which unblocks the agent generator,
+		// which releases the mutex. Without this, deleteSession hangs until the
+		// agent naturally completes (potentially 30+ minutes).
+		if (activeSession.instance) {
+			try {
+				await activeSession.instance.kill();
+			} catch {
+				// best-effort
+			}
+		}
+
+		// Now acquire mutex (should be released quickly since the command was killed)
 		const mutex = this._getMutex(sessionId);
 		await mutex.acquire();
 
@@ -388,14 +400,6 @@ export class SessionManager {
 			if (!this.activeSessions.has(sessionId)) return;
 
 			this._clearIdleTimer(sessionId);
-
-			if (activeSession.instance) {
-				try {
-					await activeSession.instance.kill();
-				} catch {
-					// best-effort
-				}
-			}
 
 			activeSession.session.status = "ended";
 			this.opts.store.update(sessionId, { status: "ended" });

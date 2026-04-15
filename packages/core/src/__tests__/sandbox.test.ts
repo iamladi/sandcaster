@@ -46,7 +46,11 @@ import {
 	extractGeneratedFiles,
 	uploadFiles,
 } from "../files.js";
-import { runAgentInSandbox, SandboxError } from "../sandbox.js";
+import {
+	runAgentInSandbox,
+	runAgentOnInstance,
+	SandboxError,
+} from "../sandbox.js";
 import type { SandboxInstance, SandboxProvider } from "../sandbox-provider.js";
 import { registerSandboxProvider, resetRegistry } from "../sandbox-registry.js";
 import type { QueryRequest } from "../schemas.js";
@@ -1095,7 +1099,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		expect(toolResult?.sandbox).toBeUndefined();
 	});
 
-	it("does NOT overwrite an existing sandbox field on tool_use events", async () => {
+	it("does NOT overwrite an existing sandbox field on tool_use events (composite)", async () => {
 		// If the event already carries a sandbox label, we should keep it.
 		// (The spec says tag when composite active — if already set we pass through.)
 		const toolUseEvent = {
@@ -1262,5 +1266,103 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		const responsePayload = JSON.parse(tmpWriteCall![1]);
 		expect(responsePayload.ok).toBe(true);
 		expect(responsePayload.workDir).toBe(secondaryWorkDir);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// runAgentOnInstance — abort signal handling
+// ---------------------------------------------------------------------------
+
+describe("runAgentOnInstance — abort signal", () => {
+	beforeEach(() => {
+		resetRegistry();
+		process.env.E2B_API_KEY = "test-e2b-key";
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("yields abort error and completes when abort signal fires during stream", async () => {
+		const ac = new AbortController();
+
+		// Simulate a long-running command that never finishes on its own
+		const instance = makeFakeInstance([]);
+		instance.commands.run.mockImplementation(
+			async (
+				_cmd: string,
+				opts?: {
+					onStdout?: (data: string) => void;
+					onStderr?: (data: string) => void;
+				},
+			) => {
+				// Emit one event, then wait indefinitely
+				opts?.onStdout?.(
+					`${JSON.stringify({ type: "assistant", content: "Working..." })}\n`,
+				);
+				// Wait until aborted or long timeout
+				await new Promise<void>((resolve) => {
+					const timer = setTimeout(resolve, 30_000);
+					ac.signal.addEventListener("abort", () => {
+						clearTimeout(timer);
+						resolve();
+					});
+				});
+				return { stdout: "", stderr: "", exitCode: 0 };
+			},
+		);
+
+		const events: Array<{ type: string; content?: string; code?: string }> = [];
+		const genPromise = (async () => {
+			for await (const event of runAgentOnInstance(
+				instance,
+				{ prompt: "test" },
+				undefined,
+				ac.signal,
+			)) {
+				events.push(event);
+			}
+		})();
+
+		// Let the generator start and emit the first event
+		await new Promise((r) => setTimeout(r, 50));
+
+		// Abort
+		ac.abort();
+
+		// The generator should complete promptly
+		await genPromise;
+
+		// Should have the assistant event and an abort error
+		const abortEvent = events.find(
+			(e) => e.type === "error" && e.code === "ABORTED",
+		);
+		expect(abortEvent).toBeDefined();
+	});
+
+	it("returns immediately with abort error when signal is already aborted", async () => {
+		const ac = new AbortController();
+		ac.abort(); // Pre-abort
+
+		const instance = makeFakeInstance([
+			JSON.stringify({ type: "assistant", content: "Should not see this" }),
+		]);
+
+		const events: Array<{ type: string; code?: string }> = [];
+		for await (const event of runAgentOnInstance(
+			instance,
+			{ prompt: "test" },
+			undefined,
+			ac.signal,
+		)) {
+			events.push(event);
+		}
+
+		// Should yield only the abort error, not the assistant event
+		expect(events).toHaveLength(1);
+		expect(events[0]).toMatchObject({ type: "error", code: "ABORTED" });
+
+		// The command should not have been run
+		expect(instance.commands.run).not.toHaveBeenCalled();
 	});
 });
