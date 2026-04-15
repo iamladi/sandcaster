@@ -228,8 +228,7 @@ export function createVercelProvider(): SandboxProvider {
 								if (raceResult === "timeout") {
 									return {
 										stdout,
-										stderr:
-											stderr || "Command timeout: exceeded time limit",
+										stderr: stderr || "Command timeout: exceeded time limit",
 										exitCode: -1,
 									};
 								}
