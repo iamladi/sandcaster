@@ -131,7 +131,12 @@ describe("IpcClient.request — emitting", () => {
 		});
 		const client = new IpcClient(deps, makeConfig({ nonce: "real-nonce" }));
 
-		await client.request("exec", { id: "evil-id", nonce: "evil-nonce", name: "worker", command: "ls" });
+		await client.request("exec", {
+			id: "evil-id",
+			nonce: "evil-nonce",
+			name: "worker",
+			command: "ls",
+		});
 
 		const parsed = JSON.parse(emittedLines[0]);
 		expect(parsed.nonce).toBe("real-nonce");
