@@ -153,6 +153,6 @@ const NOUNS = [
 export function generateSessionId(): string {
 	const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
 	const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-	const num = Math.floor(1000 + Math.random() * 9000); // 4-digit number
-	return `sess_${adj}-${noun}-${num}`;
+	const uuid = crypto.randomUUID().split("-")[0]; // 8 hex chars = ~4 billion possibilities
+	return `sess_${adj}-${noun}-${uuid}`;
 }
