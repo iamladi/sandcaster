@@ -407,7 +407,6 @@ describe("composite-integration", () => {
 				},
 			);
 			expect(secondSpawnTmpWrite).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const response = JSON.parse(secondSpawnTmpWrite![1]);
 			expect(response.ok).toBe(false);
 			expect(response.error).toContain("maxSandboxes");
@@ -447,7 +446,6 @@ describe("composite-integration", () => {
 				},
 			);
 			expect(dockerSpawnTmpWrite).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const response = JSON.parse(dockerSpawnTmpWrite![1]);
 			expect(response.ok).toBe(false);
 			expect(response.error).toContain("allowedProviders");
@@ -521,7 +519,6 @@ describe("composite-integration", () => {
 				},
 			);
 			expect(thirdSpawnTmpWrite).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const response = JSON.parse(thirdSpawnTmpWrite![1]);
 			expect(response.ok).toBe(false);
 		});
@@ -594,7 +591,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(true);
 			expect(responsePayload.workDir).toBe(secondaryWorkDir);
@@ -624,7 +620,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(true);
 			expect(Array.isArray(responsePayload.result)).toBe(true);
@@ -686,7 +681,6 @@ describe("composite-integration", () => {
 				},
 			);
 			expect(execTmpWrite).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(execTmpWrite![1]);
 			expect(responsePayload.ok).toBe(true);
 			expect(responsePayload.result).toMatchObject({ stdout: "exec-output" });
@@ -740,7 +734,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(false);
 			expect(responsePayload.error).toContain("Auth failed for secondary");
@@ -772,7 +765,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(false);
 			expect(responsePayload.error).toContain("nonexistent");
@@ -803,7 +795,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(false);
 			expect(responsePayload.error).toContain("ghost");
@@ -836,7 +827,6 @@ describe("composite-integration", () => {
 					typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 			);
 			expect(tmpWriteCall).toBeDefined();
-			// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 			const responsePayload = JSON.parse(tmpWriteCall![1]);
 			expect(responsePayload.ok).toBe(false);
 		});
@@ -919,7 +909,6 @@ describe("composite-integration", () => {
 						typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 				);
 				expect(tmpWriteCall).toBeDefined();
-				// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 				const responsePayload = JSON.parse(tmpWriteCall![1]);
 				expect(responsePayload.ok).toBe(true);
 				expect(responsePayload.workDir).toBe(secondaryInstance.workDir);
@@ -1006,7 +995,6 @@ describe("composite-integration", () => {
 					},
 				);
 				expect(transferTmpWrite).toBeDefined();
-				// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 				const responsePayload = JSON.parse(transferTmpWrite![1]);
 
 				if (expectOk) {

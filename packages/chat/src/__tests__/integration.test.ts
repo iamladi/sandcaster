@@ -9,7 +9,6 @@ import { SessionPool } from "../session-pool.js";
 // ---------------------------------------------------------------------------
 
 vi.mock("chat", () => {
-	// biome-ignore lint: must be regular function for `new` support
 	const Chat = vi.fn(function ChatCtor(this: any) {
 		this.onNewMention = vi.fn((handler: any) => {
 			this._mentionHandler = handler;

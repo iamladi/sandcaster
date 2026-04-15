@@ -15,7 +15,6 @@ import type { ChatConfig } from "../config.js";
 // ---------------------------------------------------------------------------
 
 vi.mock("chat", () => {
-	// biome-ignore lint: must be regular function for `new` support
 	const ChatMock = vi.fn(function ChatCtor(this: {
 		onNewMention: ReturnType<typeof vi.fn>;
 		onSubscribedMessage: ReturnType<typeof vi.fn>;

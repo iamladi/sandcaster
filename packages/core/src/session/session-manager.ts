@@ -633,7 +633,6 @@ export class SessionManager {
 		let costUsd: number | undefined;
 		let numTurns: number | undefined;
 		let durationSecs: number | undefined;
-		// biome-ignore lint/style/useSingleVarDeclarator: set in catch, read in finally
 		let runFailed = false;
 
 		try {

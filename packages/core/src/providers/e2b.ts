@@ -121,13 +121,11 @@ export function createE2BProvider(): SandboxProvider {
 						customImage: true,
 					},
 					files: {
-						// biome-ignore lint/suspicious/noExplicitAny: E2B SDK types differ slightly from SandboxInstance interface
 						write(path: string, content: string | Uint8Array): Promise<void> {
 							return sbx.files
 								.write(path, content as any)
 								.then(() => undefined);
 						},
-						// biome-ignore lint/suspicious/noExplicitAny: E2B SDK types differ slightly from SandboxInstance interface
 						read(
 							path: string,
 							opts?: { format?: "text" | "bytes" },
@@ -138,7 +136,6 @@ export function createE2BProvider(): SandboxProvider {
 						},
 					},
 					commands: {
-						// biome-ignore lint/suspicious/noExplicitAny: E2B SDK types differ slightly from SandboxInstance interface
 						run(
 							cmd: string,
 							opts?: CommandOptions,
