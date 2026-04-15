@@ -415,10 +415,17 @@ export async function* runAgentInSandbox(
 					}
 				},
 			})
-			.then(() => {
+			.then((result) => {
 				// Flush any remaining buffered content
 				if (stdoutBuffer.trim()) stream.push(stdoutBuffer);
-				stream.end();
+				if (result.exitCode !== 0) {
+					const detail = _stderrBuffer.trim()
+						? `Runner exited with code ${result.exitCode}\nstderr: ${_stderrBuffer.trim()}`
+						: `Runner exited with code ${result.exitCode}`;
+					stream.destroy(new Error(detail));
+				} else {
+					stream.end();
+				}
 			})
 			.catch((err: unknown) => {
 				stream.destroy(err instanceof Error ? err : new Error(String(err)));
@@ -645,9 +652,16 @@ export async function* runAgentOnInstance(
 				}
 			},
 		})
-		.then(() => {
+		.then((result) => {
 			if (stdoutBuffer.trim()) stream.push(stdoutBuffer);
-			stream.end();
+			if (result.exitCode !== 0) {
+				const detail = stderrBuffer.trim()
+					? `Runner exited with code ${result.exitCode}\nstderr: ${stderrBuffer.trim()}`
+					: `Runner exited with code ${result.exitCode}`;
+				stream.destroy(new Error(detail));
+			} else {
+				stream.end();
+			}
 		})
 		.catch((err: unknown) => {
 			stream.destroy(err instanceof Error ? err : new Error(String(err)));
