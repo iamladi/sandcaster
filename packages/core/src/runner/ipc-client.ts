@@ -27,10 +27,10 @@ export class IpcClient {
 		const id = crypto.randomUUID();
 		const message = {
 			type: "composite_request",
+			...payload,
 			id,
 			nonce: this.config.nonce,
 			action,
-			...payload,
 		};
 
 		this.deps.emit(JSON.stringify(message));
