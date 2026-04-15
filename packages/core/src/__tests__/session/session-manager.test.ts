@@ -162,7 +162,7 @@ describe("SessionManager", () => {
 		);
 		await collectEvents(events);
 
-		expect(sessionId).toMatch(/^sess_[a-z]+-[a-z]+-\d{4}$/);
+		expect(sessionId).toMatch(/^sess_[a-z]+-[a-z]+-[0-9a-f]{8}$/);
 		const session = manager.getSession(sessionId);
 		expect(session).toBeDefined();
 		expect(session?.status).toBe("active");
@@ -890,6 +890,29 @@ describe("SessionManager", () => {
 		// Session should NOT be stuck in "running" — it should have finalized
 		const active = manager.getActiveSession(sessionId);
 		expect(active!.session.status).not.toBe("running");
+	});
+
+	// -------------------------------------------------------------------------
+	// Test: generateSessionId uses hex suffix from crypto.randomUUID
+	// -------------------------------------------------------------------------
+
+	it("generateSessionId uses hex suffix from crypto.randomUUID", async () => {
+		const { generateSessionId } = await import("../../session/types.js");
+		const id = generateSessionId();
+		expect(id).toMatch(/^sess_[a-z]+-[a-z]+-[0-9a-f]{8}$/);
+	});
+
+	// -------------------------------------------------------------------------
+	// Test: generateSessionId produces unique IDs across many calls
+	// -------------------------------------------------------------------------
+
+	it("generateSessionId produces unique IDs across many calls", async () => {
+		const { generateSessionId } = await import("../../session/types.js");
+		const ids = new Set<string>();
+		for (let i = 0; i < 10000; i++) {
+			ids.add(generateSessionId());
+		}
+		expect(ids.size).toBe(10000);
 	});
 
 	// -------------------------------------------------------------------------
