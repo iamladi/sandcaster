@@ -206,7 +206,36 @@ export function createVercelProvider(): SandboxProvider {
 						): Promise<{ stdout: string; stderr: string; exitCode: number }> {
 							// Wrap with sh -c so shell operators (pipes, redirects, quotes) work
 							const command = await sbx.runCommand("sh", ["-c", cmd]);
-							const { stdout, stderr } = await collectLogs(command.logs, opts);
+
+							// Collect logs with optional timeout
+							let stdout = "";
+							let stderr = "";
+
+							const logsPromise = (async () => {
+								const result = await collectLogs(command.logs, opts);
+								stdout = result.stdout;
+								stderr = result.stderr;
+							})();
+
+							if (opts?.timeoutMs !== undefined) {
+								const timeoutPromise = new Promise<"timeout">((resolve) =>
+									setTimeout(() => resolve("timeout"), opts.timeoutMs),
+								);
+								const raceResult = await Promise.race([
+									logsPromise.then(() => "done" as const),
+									timeoutPromise,
+								]);
+								if (raceResult === "timeout") {
+									return {
+										stdout,
+										stderr: stderr || "Command timeout: exceeded time limit",
+										exitCode: -1,
+									};
+								}
+							} else {
+								await logsPromise;
+							}
+
 							return { stdout, stderr, exitCode: command.exitCode };
 						},
 					},
