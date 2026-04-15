@@ -49,6 +49,20 @@ describe("addTurn", () => {
 		expect(history[1].content).toBe("next");
 	});
 
+	it("does not remove an unrelated turn when oldest is an unpaired tool_result", () => {
+		const history: ConversationTurn[] = [
+			{ role: "user", content: "tool_result: ok", isToolCall: true },
+			{ role: "assistant", content: "important response" },
+			{ role: "user", content: "follow up" },
+		];
+		addTurn(history, { role: "assistant", content: "new response" }, 3);
+		// Should remove only the unpaired tool_result, not the important response
+		expect(history).toHaveLength(3);
+		expect(history[0].content).toBe("important response");
+		expect(history[1].content).toBe("follow up");
+		expect(history[2].content).toBe("new response");
+	});
+
 	it("does not split a tool call pair when trimming", () => {
 		const history: ConversationTurn[] = [
 			{ role: "user", content: "regular" },

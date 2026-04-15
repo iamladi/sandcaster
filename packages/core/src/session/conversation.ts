@@ -15,7 +15,7 @@ export function addTurn(
 	history.push(turn);
 
 	while (history.length > maxTurns) {
-		if (history[0]?.isToolCall) {
+		if (history[0]?.isToolCall && history[1]?.isToolCall) {
 			// Remove both turns of the tool call pair
 			history.splice(0, 2);
 		} else {
