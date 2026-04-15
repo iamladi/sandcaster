@@ -484,6 +484,122 @@ describe("SessionManager", () => {
 	});
 
 	// -------------------------------------------------------------------------
+	// Test 9b: deleteSession completes promptly during an active run
+	// -------------------------------------------------------------------------
+
+	it("deleteSession completes promptly even when agent holds the mutex", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+
+		let resolveAgent!: () => void;
+		const slowAgent = async function* (
+			_instance: SandboxInstance,
+			_request: unknown,
+			_config: unknown,
+			signal?: AbortSignal,
+		): AsyncGenerator<SandcasterEvent> {
+			// Wait for abort or a long time — simulating an agent that takes 30+ min
+			await new Promise<void>((resolve) => {
+				resolveAgent = resolve;
+				if (signal) {
+					signal.addEventListener("abort", () => resolve(), { once: true });
+				}
+				// Fallback after 30s (should not be reached)
+				setTimeout(resolve, 30_000);
+			});
+			yield {
+				type: "result",
+				content: "Done",
+				costUsd: 0,
+				numTurns: 0,
+				durationSecs: 0,
+			} satisfies SandcasterEvent;
+		};
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: createFakeRunAgent(),
+		});
+
+		const { sessionId, events: createEvents } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: undefined }),
+		);
+		await collectEvents(createEvents);
+
+		// Switch to slow agent
+		(manager as unknown as { opts: { runAgent: unknown } }).opts.runAgent =
+			slowAgent;
+
+		// Start a long-running message
+		const msgGenPromise = manager.sendMessage(sessionId, {
+			prompt: "slow task",
+		});
+
+		// Give it a tick to start
+		await new Promise((r) => setTimeout(r, 0));
+
+		// deleteSession should complete within a reasonable time (not hang for 30s)
+		const start = Date.now();
+		await manager.deleteSession(sessionId);
+		const elapsed = Date.now() - start;
+
+		// Should complete in under 2 seconds (not 30+)
+		expect(elapsed).toBeLessThan(2000);
+
+		// Session should be ended
+		expect(store.get(sessionId)?.status).toBe("ended");
+
+		// Clean up — consume the generator
+		const gen = await msgGenPromise;
+		await collectEvents(gen);
+	});
+
+	// -------------------------------------------------------------------------
+	// Test 9c: deleteSession kills instance before mutex acquisition
+	// -------------------------------------------------------------------------
+
+	it("deleteSession kills sandbox instance before acquiring mutex", async () => {
+		const sandbox = createFakeSandbox();
+		const store = createFakeStore();
+
+		const callOrder: string[] = [];
+
+		// Track kill calls
+		sandbox.kill = vi.fn().mockImplementation(async () => {
+			callOrder.push("kill");
+		});
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory: vi.fn().mockResolvedValue(sandbox),
+			runAgent: createFakeRunAgent(),
+		});
+
+		const { sessionId, events: createEvents } = await manager.createSession(
+			makeSessionCreateRequest({ prompt: undefined }),
+		);
+		await collectEvents(createEvents);
+
+		// Spy on mutex.acquire to track call order
+		const mutex = (
+			manager as unknown as { mutexes: Map<string, { acquire: () => Promise<void> }> }
+		).mutexes.get(sessionId)!;
+		const origAcquire = mutex.acquire.bind(mutex);
+		mutex.acquire = vi.fn().mockImplementation(async () => {
+			callOrder.push("mutex.acquire");
+			return origAcquire();
+		});
+
+		await manager.deleteSession(sessionId);
+
+		// kill should be called BEFORE mutex.acquire
+		expect(callOrder.indexOf("kill")).toBeLessThan(
+			callOrder.indexOf("mutex.acquire"),
+		);
+	});
+
+	// -------------------------------------------------------------------------
 	// Test 10: idle timeout expires session
 	// -------------------------------------------------------------------------
 
