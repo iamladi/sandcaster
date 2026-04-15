@@ -583,7 +583,9 @@ describe("SessionManager", () => {
 
 		// Spy on mutex.acquire to track call order
 		const mutex = (
-			manager as unknown as { mutexes: Map<string, { acquire: () => Promise<void> }> }
+			manager as unknown as {
+				mutexes: Map<string, { acquire: () => Promise<void> }>;
+			}
 		).mutexes.get(sessionId)!;
 		const origAcquire = mutex.acquire.bind(mutex);
 		mutex.acquire = vi.fn().mockImplementation(async () => {
