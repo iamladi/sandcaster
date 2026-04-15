@@ -726,7 +726,9 @@ describe("runAgentInSandbox", () => {
 			events.push(event as { type: string; content?: string; code?: string });
 		}
 
-		const errorEvent = events.find((e) => e.type === "error" && e.code === "RUNNER_ERROR");
+		const errorEvent = events.find(
+			(e) => e.type === "error" && e.code === "RUNNER_ERROR",
+		);
 		expect(errorEvent).toBeDefined();
 		expect(errorEvent?.content).toContain("139");
 	});
@@ -753,14 +755,13 @@ describe("runAgentOnInstance", () => {
 		);
 
 		const events: Array<{ type: string; content?: string; code?: string }> = [];
-		for await (const event of runAgentOnInstance(
-			instance,
-			makeRequest(),
-		)) {
+		for await (const event of runAgentOnInstance(instance, makeRequest())) {
 			events.push(event as { type: string; content?: string; code?: string });
 		}
 
-		const errorEvent = events.find((e) => e.type === "error" && e.code === "RUNNER_ERROR");
+		const errorEvent = events.find(
+			(e) => e.type === "error" && e.code === "RUNNER_ERROR",
+		);
 		expect(errorEvent).toBeDefined();
 		expect(errorEvent?.content).toContain("139");
 	});
@@ -771,10 +772,7 @@ describe("runAgentOnInstance", () => {
 		]);
 
 		const events: Array<{ type: string; code?: string }> = [];
-		for await (const event of runAgentOnInstance(
-			instance,
-			makeRequest(),
-		)) {
+		for await (const event of runAgentOnInstance(instance, makeRequest())) {
 			events.push(event as { type: string; code?: string });
 		}
 
