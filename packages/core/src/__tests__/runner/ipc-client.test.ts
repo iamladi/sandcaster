@@ -121,6 +121,28 @@ describe("IpcClient.request — emitting", () => {
 		expect(parsed.template).toBe("tmpl");
 	});
 
+	it("does not allow payload to override id or nonce", async () => {
+		const emittedLines: string[] = [];
+		const response = makeResponse({ id: "stub" });
+		const readFile = vi.fn().mockResolvedValueOnce(JSON.stringify(response));
+		const deps = makeDeps({
+			emit: (line) => emittedLines.push(line),
+			readFile,
+		});
+		const client = new IpcClient(deps, makeConfig({ nonce: "real-nonce" }));
+
+		await client.request("exec", {
+			id: "evil-id",
+			nonce: "evil-nonce",
+			name: "worker",
+			command: "ls",
+		});
+
+		const parsed = JSON.parse(emittedLines[0]);
+		expect(parsed.nonce).toBe("real-nonce");
+		expect(parsed.id).not.toBe("evil-id");
+	});
+
 	it("emits a request with a unique id each call", async () => {
 		const emittedLines: string[] = [];
 		// readFile: for each call, return a matching response
