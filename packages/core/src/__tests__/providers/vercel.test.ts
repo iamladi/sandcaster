@@ -484,6 +484,30 @@ describe("createVercelProvider", () => {
 		expect(cmdRes.stderr).toBe("err1\n");
 	});
 
+	it("enforces per-command timeoutMs and returns exitCode -1 on timeout", async () => {
+		const runCommand = vi.fn().mockResolvedValue({
+			exitCode: 0,
+			logs: () =>
+				(async function* () {
+					// Never yields — simulates a hung command
+					await new Promise(() => {});
+				})(),
+		});
+		const fakeSbx = makeVercelSandbox({ runCommand });
+		mockSandboxCreate.mockResolvedValue(fakeSbx);
+
+		const provider = createVercelProvider();
+		const result = await provider.create({});
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		const cmdRes = await result.instance.commands.run("sleep 999", {
+			timeoutMs: 50,
+		});
+		expect(cmdRes.exitCode).toBe(-1);
+		expect(cmdRes.stderr).toContain("timeout");
+	});
+
 	it("commands.run handles StreamError mid-stream and returns partial output", async () => {
 		class StreamError extends Error {
 			constructor(message: string) {
