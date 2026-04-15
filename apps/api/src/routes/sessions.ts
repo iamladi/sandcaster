@@ -17,10 +17,22 @@ async function _drainEventsToSSE(
 	events: AsyncIterable<SandcasterEvent>,
 ): Promise<void> {
 	c.header("Content-Encoding", "Identity");
-	for await (const event of events) {
+	try {
+		for await (const event of events) {
+			await stream.writeSSE({
+				event: event.type,
+				data: JSON.stringify(event),
+			});
+		}
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
 		await stream.writeSSE({
-			event: event.type,
-			data: JSON.stringify(event),
+			event: "error",
+			data: JSON.stringify({
+				type: "error",
+				content: message,
+				code: "STREAM_ERROR",
+			}),
 		});
 	}
 }

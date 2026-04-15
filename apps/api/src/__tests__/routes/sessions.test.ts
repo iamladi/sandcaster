@@ -226,6 +226,40 @@ describe("POST /sessions/:id/messages", () => {
 		expect(text).toContain("event: assistant");
 	});
 
+	test("emits SSE error event when the event generator throws mid-stream", async () => {
+		const sessionManager = createTestSessionManager();
+		const app = createApp({ sessionManager });
+
+		// Create a session first
+		const createRes = await postSession(app, { prompt: "init" });
+		const createText = await createRes.text();
+		const match = createText.match(/"sessionId":"([^"]+)"/);
+		const sessionId = match?.[1] as string;
+		expect(sessionId).toBeDefined();
+
+		// Mock sendMessage to return an async generator that throws mid-stream
+		vi.spyOn(sessionManager, "sendMessage").mockImplementation(
+			async function () {
+				return (async function* () {
+					yield {
+						type: "assistant",
+						content: "Partial",
+					} satisfies SandcasterEvent;
+					throw new Error("command execution failed");
+				})();
+			},
+		);
+
+		const res = await postMessage(app, sessionId, { prompt: "trigger error" });
+		expect(res.status).toBe(200);
+
+		const text = await res.text();
+		expect(text).toContain("event: assistant");
+		expect(text).toContain("event: error");
+		expect(text).toContain("STREAM_ERROR");
+		expect(text).toContain("command execution failed");
+	});
+
 	test("detects /status command and returns session_command_result event", async () => {
 		const sessionManager = createTestSessionManager();
 		const app = createApp({ sessionManager });
