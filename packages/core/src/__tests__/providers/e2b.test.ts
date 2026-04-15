@@ -261,6 +261,42 @@ describe("createE2BProvider", () => {
 		});
 	});
 
+	it("returns exitCode instead of throwing when command exits non-zero", async () => {
+		const nonZeroError = Object.assign(new Error("Command failed"), {
+			stdout: "partial output",
+			stderr: "error message",
+			exitCode: 1,
+		});
+		const commandsRun = vi.fn().mockRejectedValueOnce(nonZeroError);
+		const fakeSbx = makeE2BSandbox({ commandsRun });
+		createMock.mockResolvedValue(fakeSbx);
+
+		const provider = createE2BProvider();
+		const result = await provider.create({ apiKey: "test-key" });
+		if (!result.ok) throw new Error("unreachable");
+
+		const cmdResult = await result.instance.commands.run("exit 1");
+		expect(cmdResult.exitCode).toBe(1);
+		expect(cmdResult.stdout).toBe("partial output");
+		expect(cmdResult.stderr).toBe("error message");
+	});
+
+	it("rethrows errors without exitCode property", async () => {
+		const commandsRun = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("Network error"));
+		const fakeSbx = makeE2BSandbox({ commandsRun });
+		createMock.mockResolvedValue(fakeSbx);
+
+		const provider = createE2BProvider();
+		const result = await provider.create({ apiKey: "test-key" });
+		if (!result.ok) throw new Error("unreachable");
+
+		await expect(result.instance.commands.run("ls")).rejects.toThrow(
+			"Network error",
+		);
+	});
+
 	it("instance.commands.run maps onStdout/onStderr/timeoutMs from opts", async () => {
 		const commandsRun = vi
 			.fn()
