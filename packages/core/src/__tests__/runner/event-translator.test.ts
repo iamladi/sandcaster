@@ -176,6 +176,68 @@ describe("createEventTranslator", () => {
 			expect(resultEvent.numTurns).toBe(1);
 		});
 
+		it("sums costUsd across all assistant messages in multi-turn run", () => {
+			const translator = createEventTranslator();
+			const messages = [
+				makeAssistantMessage({
+					usage: {
+						input: 100,
+						output: 50,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 150,
+						cost: {
+							input: 0.001,
+							output: 0.002,
+							cacheRead: 0,
+							cacheWrite: 0,
+							total: 0.01,
+						},
+					},
+				}),
+				makeAssistantMessage({
+					usage: {
+						input: 200,
+						output: 100,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 300,
+						cost: {
+							input: 0.002,
+							output: 0.004,
+							cacheRead: 0,
+							cacheWrite: 0,
+							total: 0.02,
+						},
+					},
+				}),
+				makeAssistantMessage({
+					usage: {
+						input: 300,
+						output: 150,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 450,
+						cost: {
+							input: 0.003,
+							output: 0.006,
+							cacheRead: 0,
+							cacheWrite: 0,
+							total: 0.03,
+						},
+					},
+				}),
+			];
+			const events = translator.translate({
+				type: "agent_end",
+				messages,
+			});
+
+			expect(events).toHaveLength(1);
+			const result = events[0] as { costUsd: number };
+			expect(result.costUsd).toBeCloseTo(0.06);
+		});
+
 		it("counts all assistant messages for numTurns", () => {
 			const translator = createEventTranslator();
 			const messages = [

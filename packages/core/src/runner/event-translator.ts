@@ -112,7 +112,16 @@ export function createEventTranslator(): {
 					return [];
 				}
 
-				const costUsd = last.usage?.cost?.total;
+				// Sum cost across all assistant messages
+				let totalCost = 0;
+				let hasCost = false;
+				for (const msg of assistantMessages) {
+					if (msg.usage?.cost?.total !== undefined) {
+						totalCost += msg.usage.cost.total;
+						hasCost = true;
+					}
+				}
+				const costUsd = hasCost ? totalCost : undefined;
 				const model = last.model;
 				const numTurns = assistantMessages.length;
 
