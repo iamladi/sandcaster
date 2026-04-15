@@ -46,7 +46,11 @@ import {
 	extractGeneratedFiles,
 	uploadFiles,
 } from "../files.js";
-import { runAgentInSandbox, SandboxError } from "../sandbox.js";
+import {
+	runAgentInSandbox,
+	runAgentOnInstance,
+	SandboxError,
+} from "../sandbox.js";
 import type { SandboxInstance, SandboxProvider } from "../sandbox-provider.js";
 import { registerSandboxProvider, resetRegistry } from "../sandbox-registry.js";
 import type { QueryRequest } from "../schemas.js";
@@ -691,6 +695,91 @@ describe("runAgentInSandbox", () => {
 	it("SandboxError is instanceof Error", () => {
 		const err = new SandboxError("failed", "create");
 		expect(err).toBeInstanceOf(Error);
+	});
+
+	// -------------------------------------------------------------------------
+	// Non-zero exit code detection (non-streaming providers)
+	// -------------------------------------------------------------------------
+
+	it("yields RUNNER_ERROR when runner exits with non-zero code (non-streaming provider)", async () => {
+		const instance = makeFakeInstance([]);
+		// Simulate a non-streaming provider: commands.run resolves successfully
+		// but with a non-zero exit code (e.g. Docker with reject: false)
+		instance.commands.run.mockImplementation(
+			async (
+				_cmd: string,
+				opts?: {
+					onStdout?: (data: string) => void;
+					onStderr?: (data: string) => void;
+				},
+			) => {
+				opts?.onStderr?.("Segmentation fault\n");
+				return { stdout: "", stderr: "Segmentation fault", exitCode: 139 };
+			},
+		);
+		registerFakeProvider(instance);
+
+		const events: Array<{ type: string; content?: string; code?: string }> = [];
+		for await (const event of runAgentInSandbox({
+			request: makeRequest(),
+		})) {
+			events.push(event as { type: string; content?: string; code?: string });
+		}
+
+		const errorEvent = events.find((e) => e.type === "error" && e.code === "RUNNER_ERROR");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent?.content).toContain("139");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// runAgentOnInstance — non-zero exit code detection
+// ---------------------------------------------------------------------------
+
+describe("runAgentOnInstance", () => {
+	it("yields RUNNER_ERROR when runner exits with non-zero code", async () => {
+		const instance = makeFakeInstance([]);
+		instance.commands.run.mockImplementation(
+			async (
+				_cmd: string,
+				opts?: {
+					onStdout?: (data: string) => void;
+					onStderr?: (data: string) => void;
+				},
+			) => {
+				opts?.onStderr?.("Segmentation fault\n");
+				return { stdout: "", stderr: "Segmentation fault", exitCode: 139 };
+			},
+		);
+
+		const events: Array<{ type: string; content?: string; code?: string }> = [];
+		for await (const event of runAgentOnInstance(
+			instance,
+			makeRequest(),
+		)) {
+			events.push(event as { type: string; content?: string; code?: string });
+		}
+
+		const errorEvent = events.find((e) => e.type === "error" && e.code === "RUNNER_ERROR");
+		expect(errorEvent).toBeDefined();
+		expect(errorEvent?.content).toContain("139");
+	});
+
+	it("does not yield error when runner exits with code 0", async () => {
+		const instance = makeFakeInstance([
+			JSON.stringify({ type: "result", content: "done" }),
+		]);
+
+		const events: Array<{ type: string; code?: string }> = [];
+		for await (const event of runAgentOnInstance(
+			instance,
+			makeRequest(),
+		)) {
+			events.push(event as { type: string; code?: string });
+		}
+
+		const errorEvent = events.find((e) => e.code === "RUNNER_ERROR");
+		expect(errorEvent).toBeUndefined();
 	});
 });
 
