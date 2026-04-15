@@ -133,7 +133,6 @@ describe("createSessionStore", () => {
 		expect(updated?.status).toBe("ended");
 		expect(updated?.totalTurns).toBe(5);
 		// lastActivityAt should be updated
-		// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 		const lastActivity = updated!.lastActivityAt;
 		expect(lastActivity >= before).toBe(true);
 		expect(lastActivity <= after).toBe(true);

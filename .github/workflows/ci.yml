@@ -23,6 +23,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: biomejs/setup-biome@v2
+        with:
+          version: "2.4.6"
       - run: biome ci .
 
   typecheck:

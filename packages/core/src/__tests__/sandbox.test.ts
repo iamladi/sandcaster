@@ -1259,7 +1259,6 @@ describe("runAgentInSandbox — composite orchestration", () => {
 				typeof call[0] === "string" && call[0].endsWith(".json.tmp"),
 		);
 		expect(tmpWriteCall).toBeDefined();
-		// biome-ignore lint/style/noNonNullAssertion: asserted defined above
 		const responsePayload = JSON.parse(tmpWriteCall![1]);
 		expect(responsePayload.ok).toBe(true);
 		expect(responsePayload.workDir).toBe(secondaryWorkDir);
