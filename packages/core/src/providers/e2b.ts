@@ -136,7 +136,7 @@ export function createE2BProvider(): SandboxProvider {
 						},
 					},
 					commands: {
-						run(
+						async run(
 							cmd: string,
 							opts?: CommandOptions,
 						): Promise<{
@@ -144,11 +144,29 @@ export function createE2BProvider(): SandboxProvider {
 							stderr: string;
 							exitCode: number;
 						}> {
-							return sbx.commands.run(cmd, opts as any) as Promise<{
-								stdout: string;
-								stderr: string;
-								exitCode: number;
-							}>;
+							try {
+								const result = await sbx.commands.run(cmd, opts as any);
+								return result as {
+									stdout: string;
+									stderr: string;
+									exitCode: number;
+								};
+							} catch (err) {
+								// E2B throws on non-zero exit — extract result if available
+								const maybeResult = err as {
+									stdout?: string;
+									stderr?: string;
+									exitCode?: number;
+								};
+								if (typeof maybeResult.exitCode === "number") {
+									return {
+										stdout: maybeResult.stdout ?? "",
+										stderr: maybeResult.stderr ?? "",
+										exitCode: maybeResult.exitCode,
+									};
+								}
+								throw err;
+							}
 						},
 					},
 					async kill(): Promise<void> {
