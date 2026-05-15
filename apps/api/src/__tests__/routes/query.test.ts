@@ -151,7 +151,7 @@ describe("POST /query", () => {
 	test("requires auth when apiKey is set", async () => {
 		const app = createApp({
 			runAgent: fakeRunAgent,
-			apiKey: "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8",
+			apiKey: "a-d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8",
 		});
 		const res = await postQuery(app, { prompt: "hello" });
 
