@@ -63,6 +63,28 @@ describe("addTurn", () => {
 		expect(history[2].content).toBe("new response");
 	});
 
+	it("does not orphan a tool_result when an unpaired tool_use precedes a complete pair", () => {
+		// Scenario: abort interrupted a previous run between tool_use(A) and
+		// tool_result(A), leaving an orphaned assistant tool_use. A later run
+		// completed a full tool_use(B) → tool_result(B) pair. Trimming must
+		// drop only the orphan, not consume tool_use(B) as if it were
+		// tool_result(A).
+		const history: ConversationTurn[] = [
+			{ role: "assistant", content: "tool_use(A)", isToolCall: true },
+			{ role: "assistant", content: "tool_use(B)", isToolCall: true },
+			{ role: "user", content: "tool_result(B)", isToolCall: true },
+			{ role: "assistant", content: "response" },
+		];
+
+		addTurn(history, { role: "user", content: "next" }, 4);
+
+		expect(history).toHaveLength(4);
+		expect(history[0].content).toBe("tool_use(B)");
+		expect(history[1].content).toBe("tool_result(B)");
+		expect(history[2].content).toBe("response");
+		expect(history[3].content).toBe("next");
+	});
+
 	it("does not split a tool call pair when trimming", () => {
 		const history: ConversationTurn[] = [
 			{ role: "user", content: "regular" },
