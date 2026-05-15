@@ -52,32 +52,48 @@ function isTimeoutError(err: unknown): boolean {
 // Streaming bridge: AsyncGenerator logs → callbacks + collected strings
 // ---------------------------------------------------------------------------
 
+// Accumulator shared between collectLogs and run() so the timeout path can
+// observe partial output without waiting for collectLogs to settle.
+interface LogAccumulator {
+	stdout: string;
+	stderr: string;
+}
+
 async function collectLogs(
-	logsGenerator: () => AsyncGenerator<{
-		stream: "stdout" | "stderr";
-		data: string;
-	}>,
+	logsGenerator: (opts?: {
+		signal?: AbortSignal;
+	}) => AsyncGenerator<{ stream: "stdout" | "stderr"; data: string }>,
+	accumulator: LogAccumulator,
 	opts?: CommandOptions,
-): Promise<{ stdout: string; stderr: string }> {
-	let stdout = "";
-	let stderr = "";
+	signal?: AbortSignal,
+): Promise<void> {
+	// Pass the abort signal into the SDK so the underlying HTTP log-streaming
+	// request can be cancelled mid-flight when timeout/abort fires.
+	const iter = logsGenerator(signal ? { signal } : undefined);
 
 	try {
-		for await (const entry of logsGenerator()) {
+		for await (const entry of iter) {
 			if (entry.stream === "stdout") {
-				stdout += entry.data;
+				accumulator.stdout += entry.data;
 				opts?.onStdout?.(entry.data);
 			} else {
-				stderr += entry.data;
+				accumulator.stderr += entry.data;
 				opts?.onStderr?.(entry.data);
 			}
 		}
 	} catch (_err) {
-		// StreamError or other mid-stream errors: return partial output collected so far
-		// Do not rethrow — partial output is better than a hard failure
+		// StreamError, cancellation, or other mid-stream errors: partial output
+		// is already in `accumulator`. Do not rethrow.
+	} finally {
+		// Best-effort: close the iterator so the SDK releases its HTTP socket.
+		// `return()` is a standard async iterator method; SDKs may also expose
+		// `.close()` on the generator instance.
+		try {
+			await iter.return?.(undefined);
+		} catch {
+			// ignore
+		}
 	}
-
-	return { stdout, stderr };
 }
 
 // ---------------------------------------------------------------------------
@@ -207,15 +223,21 @@ export function createVercelProvider(): SandboxProvider {
 							// Wrap with sh -c so shell operators (pipes, redirects, quotes) work
 							const command = await sbx.runCommand("sh", ["-c", cmd]);
 
-							// Collect logs with optional timeout
-							let stdout = "";
-							let stderr = "";
+							// Shared accumulator: collectLogs writes here as data
+							// arrives so the timeout path observes partial output.
+							const accumulator: LogAccumulator = { stdout: "", stderr: "" };
 
-							const logsPromise = (async () => {
-								const result = await collectLogs(command.logs, opts);
-								stdout = result.stdout;
-								stderr = result.stderr;
-							})();
+							// Drives stream cancellation when the timeout fires —
+							// passed into the SDK logs() call and signals the
+							// underlying HTTP request to close.
+							const logsAbort = new AbortController();
+
+							const logsPromise = collectLogs(
+								command.logs,
+								accumulator,
+								opts,
+								logsAbort.signal,
+							);
 
 							if (opts?.timeoutMs !== undefined) {
 								const timeoutPromise = new Promise<"timeout">((resolve) =>
@@ -226,9 +248,16 @@ export function createVercelProvider(): SandboxProvider {
 									timeoutPromise,
 								]);
 								if (raceResult === "timeout") {
+									// Signal the SDK to abort the log stream and wait
+									// for collectLogs to settle so its iter.return()
+									// cleanup runs and the accumulator is final.
+									logsAbort.abort();
+									await logsPromise;
 									return {
-										stdout,
-										stderr: stderr || "Command timeout: exceeded time limit",
+										stdout: accumulator.stdout,
+										stderr:
+											accumulator.stderr ||
+											"Command timeout: exceeded time limit",
 										exitCode: -1,
 									};
 								}
@@ -236,7 +265,11 @@ export function createVercelProvider(): SandboxProvider {
 								await logsPromise;
 							}
 
-							return { stdout, stderr, exitCode: command.exitCode };
+							return {
+								stdout: accumulator.stdout,
+								stderr: accumulator.stderr,
+								exitCode: command.exitCode,
+							};
 						},
 					},
 					async kill(): Promise<void> {
