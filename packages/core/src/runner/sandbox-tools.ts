@@ -40,17 +40,15 @@ export function createSandboxTools(options?: {
 				const exitCode = (err as { status?: number }).status ?? 1;
 				const stderr = (err as { stderr?: string }).stderr ?? "";
 				const stdout = (err as { stdout?: string }).stdout ?? "";
+				const message = (err as { message?: string }).message ?? "";
 				const output = [stdout, stderr].filter(Boolean).join("\n");
-				return {
-					content: [
-						{
-							type: "text" as const,
-							text: output || String(err),
-						},
-					],
-					details: { exitCode },
-					isError: true,
-				};
+				// Throw so pi-agent-core marks the tool call as `isError: true`
+				// and providers (notably Gemini) emit the error-shaped tool
+				// response. Returning `{ isError: true }` is ignored by the
+				// framework — only thrown errors propagate as tool errors.
+				throw new Error(
+					output || message || `Command exited with code ${exitCode}`,
+				);
 			}
 		},
 	};
