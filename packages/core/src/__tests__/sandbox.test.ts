@@ -1225,22 +1225,33 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		onSpy.mockRestore();
 	});
 
-	it("does NOT register a SIGTERM handler when composite is NOT active", async () => {
+	it("registers a SIGTERM handler that kills the instance in non-composite mode", async () => {
+		// Without a SIGTERM handler, Node exits immediately on signal and the
+		// `finally` block that calls `instance.kill()` never runs, leaving the
+		// sandbox alive until E2B's idle timeout (default 5 min). The handler
+		// must be registered for non-composite runs too.
 		const instance = makeFakeInstance([]);
 		registerFakeProvider(instance);
 
 		const onSpy = vi.spyOn(process, "on");
+		const offSpy = vi.spyOn(process, "off");
 
 		for await (const _ of runAgentInSandbox({
-			request: makeRequest(), // no composite
+			request: makeRequest(),
 		})) {
 			// consume
 		}
 
-		const sigtermCall = onSpy.mock.calls.find((call) => call[0] === "SIGTERM");
-		expect(sigtermCall).toBeUndefined();
+		const sigtermCall = onSpy.mock.calls.find(
+			(call) => call[0] === "SIGTERM",
+		);
+		expect(sigtermCall).toBeDefined();
+
+		const sigtermOff = offSpy.mock.calls.find((call) => call[0] === "SIGTERM");
+		expect(sigtermOff).toBeDefined();
 
 		onSpy.mockRestore();
+		offSpy.mockRestore();
 	});
 
 	it("removes the SIGTERM handler after the run completes (no leak)", async () => {
