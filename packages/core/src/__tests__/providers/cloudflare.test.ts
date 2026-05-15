@@ -454,7 +454,9 @@ describe("createCloudflareProvider", () => {
 		if (!result.ok) throw new Error("unreachable");
 
 		const controller = new AbortController();
-		await result.instance.commands.run("sleep 1", { signal: controller.signal });
+		await result.instance.commands.run("sleep 1", {
+			signal: controller.signal,
+		});
 
 		// The exec fetch (last call) must include the signal so abort propagates
 		const execCall = mockFetch.mock.calls.find(
