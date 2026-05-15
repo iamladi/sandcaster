@@ -791,6 +791,46 @@ describe("SessionManager", () => {
 		).rejects.toMatchObject({ code: "SESSION_CAPACITY_EXCEEDED" });
 	});
 
+	it("createSession capacity check is atomic under concurrent calls", async () => {
+		const store = createFakeStore();
+		// Slow sandbox factory: each call takes 30ms before resolving, so concurrent
+		// callers reach the size check before any of them has registered.
+		const sandboxFactory = vi.fn(async () => {
+			await new Promise((r) => setTimeout(r, 30));
+			return createFakeSandbox();
+		});
+
+		const manager = new SessionManager({
+			store,
+			sandboxFactory,
+			runAgent: createFakeRunAgent(),
+			maxActiveSessions: 2,
+		});
+
+		// Fire 5 concurrent createSession calls against a cap of 2.
+		const results = await Promise.allSettled(
+			Array.from({ length: 5 }, () =>
+				manager
+					.createSession(makeSessionCreateRequest({ prompt: undefined }))
+					.then(async (r) => {
+						await collectEvents(r.events);
+						return r;
+					}),
+			),
+		);
+
+		const fulfilled = results.filter((r) => r.status === "fulfilled");
+		const rejected = results.filter((r) => r.status === "rejected");
+
+		expect(fulfilled).toHaveLength(2);
+		expect(rejected).toHaveLength(3);
+		for (const r of rejected) {
+			expect((r as PromiseRejectedResult).reason).toMatchObject({
+				code: "SESSION_CAPACITY_EXCEEDED",
+			});
+		}
+	});
+
 	// -------------------------------------------------------------------------
 	// Test 16: sendMessage throws SESSION_NOT_FOUND for unknown session
 	// -------------------------------------------------------------------------
