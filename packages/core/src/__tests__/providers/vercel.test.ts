@@ -485,12 +485,17 @@ describe("createVercelProvider", () => {
 	});
 
 	it("enforces per-command timeoutMs and returns exitCode -1 on timeout", async () => {
+		// Real Vercel SDK aborts the underlying HTTP stream when its `signal`
+		// option fires. Mirror that behavior in the mock by rejecting on abort.
 		const runCommand = vi.fn().mockResolvedValue({
 			exitCode: 0,
-			logs: () =>
+			logs: (logsOpts?: { signal?: AbortSignal }) =>
 				(async function* () {
-					// Never yields — simulates a hung command
-					await new Promise(() => {});
+					await new Promise<void>((_, reject) => {
+						logsOpts?.signal?.addEventListener("abort", () =>
+							reject(new Error("aborted")),
+						);
+					});
 				})(),
 		});
 		const fakeSbx = makeVercelSandbox({ runCommand });
@@ -506,6 +511,71 @@ describe("createVercelProvider", () => {
 		});
 		expect(cmdRes.exitCode).toBe(-1);
 		expect(cmdRes.stderr).toContain("timeout");
+	});
+
+	it("preserves partial stdout/stderr emitted before timeout fires (#83)", async () => {
+		// Generator emits two chunks, then waits for the abort signal. The
+		// returned CommandResult must contain the partial output, not empty
+		// strings.
+		const runCommand = vi.fn().mockResolvedValue({
+			exitCode: 0,
+			logs: (logsOpts?: { signal?: AbortSignal }) =>
+				(async function* () {
+					yield { stream: "stdout" as const, data: "chunk1\n" };
+					yield { stream: "stderr" as const, data: "warn1\n" };
+					await new Promise<void>((_, reject) => {
+						logsOpts?.signal?.addEventListener("abort", () =>
+							reject(new Error("aborted")),
+						);
+					});
+				})(),
+		});
+		const fakeSbx = makeVercelSandbox({ runCommand });
+		mockSandboxCreate.mockResolvedValue(fakeSbx);
+
+		const provider = createVercelProvider();
+		const result = await provider.create({});
+		if (!result.ok) throw new Error("unreachable");
+
+		const cmdRes = await result.instance.commands.run("slow-cmd", {
+			timeoutMs: 80,
+		});
+
+		expect(cmdRes.exitCode).toBe(-1);
+		expect(cmdRes.stdout).toBe("chunk1\n");
+		expect(cmdRes.stderr).toContain("warn1\n");
+	});
+
+	it("passes an abort signal into command.logs so the SDK can cancel the HTTP stream (#91)", async () => {
+		let receivedSignal: AbortSignal | undefined;
+		let signalAbortedDuringRun = false;
+
+		const runCommand = vi.fn().mockResolvedValue({
+			exitCode: 0,
+			logs: (logsOpts?: { signal?: AbortSignal }) => {
+				receivedSignal = logsOpts?.signal;
+				return (async function* () {
+					yield { stream: "stdout" as const, data: "partial\n" };
+					await new Promise<void>((_, reject) => {
+						logsOpts?.signal?.addEventListener("abort", () => {
+							signalAbortedDuringRun = true;
+							reject(new Error("aborted"));
+						});
+					});
+				})();
+			},
+		});
+		const fakeSbx = makeVercelSandbox({ runCommand });
+		mockSandboxCreate.mockResolvedValue(fakeSbx);
+
+		const provider = createVercelProvider();
+		const result = await provider.create({});
+		if (!result.ok) throw new Error("unreachable");
+
+		await result.instance.commands.run("slow-cmd", { timeoutMs: 50 });
+
+		expect(receivedSignal).toBeDefined();
+		expect(signalAbortedDuringRun).toBe(true);
 	});
 
 	it("commands.run handles StreamError mid-stream and returns partial output", async () => {
