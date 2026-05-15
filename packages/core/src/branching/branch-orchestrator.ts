@@ -429,6 +429,14 @@ async function* runBranchingPath(
 		const branchId = branchIds[i];
 		const alternative = alternatives[i];
 
+		// Stagger: delay before starting the next branch
+		if (i > 0 && staggerDelayMs > 0) {
+			await new Promise((r) => setTimeout(r, staggerDelayMs));
+			// Check abort after stagger wait — must run before branch_start
+			// is yielded so we don't emit a start without a matching complete.
+			if (branchAbortController.signal.aborted) break;
+		}
+
 		yield {
 			type: "branch_start",
 			branchId,
@@ -436,13 +444,6 @@ async function* runBranchingPath(
 			totalBranches,
 			prompt: alternative,
 		};
-
-		// Stagger: delay before starting the next branch
-		if (i > 0 && staggerDelayMs > 0) {
-			await new Promise((r) => setTimeout(r, staggerDelayMs));
-			// Check abort after stagger wait
-			if (branchAbortController.signal.aborted) break;
-		}
 
 		const branchPromise = runSingleBranch(
 			branchId,
