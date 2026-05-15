@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	MIN_KEY_LENGTH,
 	validateBearerToken,
+	validateKeyFormat,
 	validateKeyLength,
 } from "../auth.js";
 
@@ -67,5 +68,29 @@ describe("validateKeyLength", () => {
 describe("MIN_KEY_LENGTH", () => {
 	it("is 32", () => {
 		expect(MIN_KEY_LENGTH).toBe(32);
+	});
+});
+
+describe("validateKeyFormat", () => {
+	// Hono's bearerAuth applies RFC 6750 §2.1 `b64token` validation
+	// (`[A-Za-z0-9._~+/-]+=*`) before invoking verifyToken. Any configured key
+	// that fails this check produces a permanent 400 on every request.
+	it("accepts RFC 6750 b64token characters", () => {
+		expect(validateKeyFormat("a".repeat(32))).toBe(true);
+		expect(validateKeyFormat("ABC._~+/-abcDEF0123456789abcdef01")).toBe(true);
+		expect(validateKeyFormat(`${"a".repeat(30)}==`)).toBe(true);
+	});
+
+	it("rejects characters outside the RFC 6750 b64token set", () => {
+		// `]`, `#`, `$`, `@`, space — all forbidden by Hono's bearerAuth regex
+		expect(validateKeyFormat("a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8")).toBe(false);
+		expect(validateKeyFormat(`a${"#".padEnd(31, "a")}`)).toBe(false);
+		expect(validateKeyFormat(`a${"$".padEnd(31, "a")}`)).toBe(false);
+		expect(validateKeyFormat(`a${"@".padEnd(31, "a")}`)).toBe(false);
+		expect(validateKeyFormat(`a${" ".padEnd(31, "a")}`)).toBe(false);
+	});
+
+	it("rejects empty string", () => {
+		expect(validateKeyFormat("")).toBe(false);
 	});
 });
