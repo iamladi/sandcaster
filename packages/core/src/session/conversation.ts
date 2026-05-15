@@ -15,8 +15,19 @@ export function addTurn(
 	history.push(turn);
 
 	while (history.length > maxTurns) {
-		if (history[0]?.isToolCall && history[1]?.isToolCall) {
-			// Remove both turns of the tool call pair
+		const first = history[0];
+		const second = history[1];
+		// A valid tool call pair is `assistant` (tool_use) followed by `user`
+		// (tool_result). Two consecutive isToolCall turns with the wrong roles
+		// (e.g. two orphaned assistant tool_use entries left by an abort) must
+		// not be removed together — that would consume an unrelated entry and
+		// orphan its partner.
+		if (
+			first?.isToolCall &&
+			second?.isToolCall &&
+			first.role === "assistant" &&
+			second.role === "user"
+		) {
 			history.splice(0, 2);
 		} else {
 			history.splice(0, 1);
