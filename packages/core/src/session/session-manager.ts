@@ -171,6 +171,10 @@ function eagerBuffer<T>(source: AsyncGenerator<T>): AsyncGenerator<T> {
 export class SessionManager {
 	private readonly activeSessions = new Map<string, ActiveSession>();
 	private readonly mutexes = new Map<string, Mutex>();
+	// In-flight createSession calls that have passed the capacity check but
+	// not yet registered. Reserved synchronously so concurrent callers
+	// observe the pending allocation before any await yields.
+	private reservedSlots = 0;
 
 	constructor(private readonly opts: SessionManagerOptions) {}
 
@@ -200,12 +204,16 @@ export class SessionManager {
 		const maxActive =
 			this.opts.maxActiveSessions ?? DEFAULT_MAX_ACTIVE_SESSIONS;
 
-		if (this.activeSessions.size >= maxActive) {
+		// Atomic capacity reservation: the check + reserve happens with no
+		// `await` in between, so concurrent callers cannot all observe an
+		// under-capacity snapshot and overshoot the limit.
+		if (this.activeSessions.size + this.reservedSlots >= maxActive) {
 			throw new SessionError(
 				`Session capacity limit reached (max ${maxActive})`,
 				"SESSION_CAPACITY_EXCEEDED",
 			);
 		}
+		this.reservedSlots++;
 
 		const sessionId = generateSessionId();
 		const now = nowIso();
@@ -238,6 +246,7 @@ export class SessionManager {
 				apiKey: request.apiKeys?.e2b,
 			});
 		} catch (err) {
+			this.reservedSlots--;
 			this.opts.store.update(sessionId, { status: "failed" });
 			throw err;
 		}
@@ -281,6 +290,9 @@ export class SessionManager {
 
 		this.activeSessions.set(sessionId, activeSession);
 		this.mutexes.set(sessionId, new Mutex());
+		// Reservation now backed by a real entry in activeSessions; release the
+		// in-flight counter so subsequent calls see the up-to-date occupancy.
+		this.reservedSlots--;
 
 		// Start idle timer
 		this._startIdleTimer(sessionId, idleTimeoutMs);
