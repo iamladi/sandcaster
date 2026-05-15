@@ -3,7 +3,7 @@ import { createApp } from "../../app.js";
 
 describe("bearer auth middleware", () => {
 	test("rejects request with invalid token when apiKey is set", async () => {
-		const app = createApp({ apiKey: "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
+		const app = createApp({ apiKey: "a-d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
 		const res = await app.request("/runs", {
 			headers: { Authorization: "Bearer wrong-key-xxxxxxxxxxxxxxxxxxxxx" },
 		});
@@ -11,7 +11,7 @@ describe("bearer auth middleware", () => {
 	});
 
 	test("allows request with valid token", async () => {
-		const key = "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8";
+		const key = "a-d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8";
 		const app = createApp({ apiKey: key });
 		const res = await app.request("/runs", {
 			headers: { Authorization: `Bearer ${key}` },
@@ -28,13 +28,13 @@ describe("bearer auth middleware", () => {
 	});
 
 	test("health endpoint is public even when apiKey is set", async () => {
-		const app = createApp({ apiKey: "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
+		const app = createApp({ apiKey: "a-d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
 		const res = await app.request("/health");
 		expect(res.status).toBe(200);
 	});
 
 	test("rejects request with no Authorization header when apiKey is set", async () => {
-		const app = createApp({ apiKey: "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
+		const app = createApp({ apiKey: "a-d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" });
 		const res = await app.request("/runs");
 		expect(res.status).toBe(401);
 	});
@@ -51,6 +51,15 @@ describe("bearer auth middleware", () => {
 
 	test("accepts apiKey exactly at MIN_KEY_LENGTH", () => {
 		expect(() => createApp({ apiKey: "a".repeat(32) })).not.toThrow();
+	});
+
+	test("throws when apiKey contains RFC 6750-invalid characters", () => {
+		// `]` is outside Hono bearerAuth's b64token regex
+		// (`[A-Za-z0-9._~+/-]+=*`). Without startup format validation, every
+		// request to a deployment configured with such a key fails with 400.
+		expect(() =>
+			createApp({ apiKey: "a]d3f5g6h7j8k9l0m1n2o3p4q5r6s7t8" }),
+		).toThrow(/RFC 6750|invalid character|format/i);
 	});
 });
 
