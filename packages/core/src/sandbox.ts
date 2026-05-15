@@ -643,6 +643,7 @@ export async function* runAgentOnInstance(
 	const runPromise = instance.commands
 		.run(`node ${runnerPath} ${configPath}`, {
 			timeoutMs: timeoutMs * 6,
+			signal: _signal,
 			onStdout,
 			onStderr: (data: string) => {
 				if (stderrBuffer.length + data.length > 500) {

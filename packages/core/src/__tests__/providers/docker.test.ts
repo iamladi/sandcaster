@@ -435,6 +435,29 @@ describe("createDockerProvider", () => {
 		);
 	});
 
+	it("commands.run forwards opts.signal to execa as cancelSignal", async () => {
+		const containerId = "abort-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		mockExeca.mockResolvedValue(makeExecaResult({ exitCode: 0 }));
+
+		const controller = new AbortController();
+		await result.instance.commands.run("sleep 10", {
+			signal: controller.signal,
+		});
+
+		expect(mockExeca).toHaveBeenCalledWith(
+			"docker",
+			["exec", containerId, "sh", "-c", "sleep 10"],
+			expect.objectContaining({ cancelSignal: controller.signal }),
+		);
+	});
+
 	it("commands.run returns exitCode -1 and timeout message when execa timedOut", async () => {
 		const containerId = "timed-container";
 		setupDefaultMocks(containerId);

@@ -441,6 +441,30 @@ describe("createCloudflareProvider", () => {
 		});
 	});
 
+	it("commands.run forwards opts.signal to fetch so callers can abort the HTTP request", async () => {
+		setupSuccessfulCreate();
+		mockFetch.mockResolvedValueOnce(
+			makeJsonResponse({ stdout: "", stderr: "", exitCode: 0 }),
+		);
+
+		const provider = createCloudflareProvider();
+		const result = await provider.create({
+			metadata: { workerUrl: WORKER_URL },
+		});
+		if (!result.ok) throw new Error("unreachable");
+
+		const controller = new AbortController();
+		await result.instance.commands.run("sleep 1", { signal: controller.signal });
+
+		// The exec fetch (last call) must include the signal so abort propagates
+		const execCall = mockFetch.mock.calls.find(
+			(call) => typeof call[0] === "string" && call[0].endsWith("/exec"),
+		);
+		expect(execCall).toBeDefined();
+		const initArg = execCall?.[1] as RequestInit | undefined;
+		expect(initArg?.signal).toBe(controller.signal);
+	});
+
 	it("commands.run passes timeoutMs in request body", async () => {
 		setupSuccessfulCreate();
 		mockFetch.mockResolvedValueOnce(

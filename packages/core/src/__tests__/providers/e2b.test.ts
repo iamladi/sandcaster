@@ -323,6 +323,26 @@ describe("createE2BProvider", () => {
 		});
 	});
 
+	it("instance.commands.run forwards opts.signal to the E2B SDK", async () => {
+		const commandsRun = vi
+			.fn()
+			.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+		const fakeSbx = makeE2BSandbox({ commandsRun });
+		createMock.mockResolvedValue(fakeSbx);
+
+		const provider = createE2BProvider();
+		const result = await provider.create({ apiKey: "test-key" });
+		if (!result.ok) throw new Error("unreachable");
+
+		const controller = new AbortController();
+		await result.instance.commands.run("ls", { signal: controller.signal });
+
+		expect(commandsRun).toHaveBeenCalledWith(
+			"ls",
+			expect.objectContaining({ signal: controller.signal }),
+		);
+	});
+
 	// -------------------------------------------------------------------------
 	// Kill
 	// -------------------------------------------------------------------------
