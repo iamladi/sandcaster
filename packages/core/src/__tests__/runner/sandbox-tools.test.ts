@@ -88,17 +88,16 @@ describe("createSandboxTools", () => {
 			expect(result.details).toMatchObject({ exitCode: 0 });
 		});
 
-		it("returns structured error with exit code and stderr on non-zero exit", async () => {
+		it("throws on non-zero exit so the framework reports a tool error", async () => {
 			const tools = createSandboxTools({ cwd: tmpDir });
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			const result = await bash.execute("call-2", {
-				command: "echo err >&2; exit 42",
-			});
-
-			expect(result.details.exitCode).toBe(42);
-			expect((result as any).isError).toBe(true);
-			expect((result.content[0] as any).text).toContain("err");
+			// The framework only marks a tool call as `isError: true` when the
+			// tool throws — returning `{ isError: true }` is ignored by
+			// providers (notably Gemini). The bash tool must therefore raise.
+			await expect(
+				bash.execute("call-2", { command: "echo err >&2; exit 42" }),
+			).rejects.toThrow(/err|exit code 42/);
 		});
 
 		it("uses custom cwd when provided", async () => {
@@ -113,28 +112,24 @@ describe("createSandboxTools", () => {
 			});
 		});
 
-		it("returns error result when cwd does not exist", async () => {
+		it("throws when cwd does not exist", async () => {
 			const tools = createSandboxTools({
 				cwd: join(tmpDir, "nonexistent-cwd"),
 			});
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			const result = await bash.execute("call-4", { command: "echo ok" });
-
-			expect((result as any).isError).toBe(true);
-			expect((result.content[0] as any).text).toContain("ENOENT");
+			await expect(
+				bash.execute("call-4", { command: "echo ok" }),
+			).rejects.toThrow(/ENOENT/);
 		});
 
-		it("returns error result when command times out", async () => {
+		it("throws when command times out", async () => {
 			const tools = createSandboxTools({ cwd: tmpDir });
 			const bash = tools.find((t) => t.name === "bash")!;
 
-			const result = await bash.execute("call-5", {
-				command: "sleep 10",
-				timeout: 1,
-			});
-
-			expect((result as any).isError).toBe(true);
+			await expect(
+				bash.execute("call-5", { command: "sleep 10", timeout: 1 }),
+			).rejects.toThrow();
 		});
 	});
 
