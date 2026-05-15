@@ -129,16 +129,19 @@ async function processReview(
 			const batch = allComments.slice(i, i + MAX_COMMENTS_PER_BATCH);
 			const prompt = formatPrompt(batch);
 
-			let resultContent = "";
+			// Agent output arrives via `assistant` events (`subtype: "complete"`
+			// carries the full text of each assistant turn). `result.content` is
+			// always the static string "Agent completed" and is for metadata only.
+			let assistantText = "";
 			for await (const ev of deps.runAgent(prompt)) {
-				if (ev.type === "result") {
-					resultContent = ev.content;
+				if (ev.type === "assistant" && ev.subtype === "complete") {
+					assistantText = ev.content;
 				}
 			}
 
-			if (!resultContent) continue;
+			if (!assistantText) continue;
 
-			const agentOutput = JSON.parse(resultContent);
+			const agentOutput = JSON.parse(assistantText);
 			const token = await getToken();
 
 			const result = await applier.applyAndPush({

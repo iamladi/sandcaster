@@ -127,11 +127,17 @@ const CANNED_AGENT_OUTPUT: AgentOutput = {
 	summary: "Fixed 1 comment",
 };
 
-/** Mock runAgent that yields a single result event */
+/** Mock runAgent that yields the agent's final assistant text */
 async function* mockRunAgent(_prompt: string): AsyncGenerator<SandcasterEvent> {
 	yield {
-		type: "result",
+		type: "assistant",
+		subtype: "complete",
 		content: JSON.stringify(CANNED_AGENT_OUTPUT),
+	};
+	yield {
+		type: "result",
+		subtype: "success",
+		content: "Agent completed",
 	};
 }
 
