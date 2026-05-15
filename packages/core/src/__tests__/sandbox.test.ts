@@ -1242,9 +1242,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 			// consume
 		}
 
-		const sigtermCall = onSpy.mock.calls.find(
-			(call) => call[0] === "SIGTERM",
-		);
+		const sigtermCall = onSpy.mock.calls.find((call) => call[0] === "SIGTERM");
 		expect(sigtermCall).toBeDefined();
 
 		const sigtermOff = offSpy.mock.calls.find((call) => call[0] === "SIGTERM");
