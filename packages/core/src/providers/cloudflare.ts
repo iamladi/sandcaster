@@ -35,11 +35,13 @@ async function workerPost(
 	url: string,
 	token: string,
 	body: unknown,
+	signal?: AbortSignal,
 ): Promise<Response> {
 	return fetch(url, {
 		method: "POST",
 		headers: authHeaders(token),
 		body: JSON.stringify(body),
+		signal,
 	});
 }
 
@@ -240,6 +242,7 @@ export function createCloudflareProvider(): SandboxProvider {
 							`${workerUrl}/sandbox/${sessionId}/exec`,
 							token,
 							body,
+							opts?.signal,
 						);
 						if (!resp.ok) {
 							throw new SandboxOperationError(

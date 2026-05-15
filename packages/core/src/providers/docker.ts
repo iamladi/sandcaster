@@ -155,6 +155,12 @@ export function createDockerProvider(): SandboxProvider {
 						if (opts?.timeoutMs !== undefined) {
 							execaOpts.timeout = opts.timeoutMs;
 						}
+						if (opts?.signal !== undefined) {
+							// execa supports cancellation via `cancelSignal`; the
+							// signal also propagates to `process.kill` for the
+							// spawned docker exec child.
+							execaOpts.cancelSignal = opts.signal;
+						}
 
 						const result = await execa(
 							"docker",
