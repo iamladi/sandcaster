@@ -540,6 +540,54 @@ describe("abort signal propagation", () => {
 		// and that the abort was respected
 		expect(controller.signal.aborted).toBe(true);
 	});
+
+	it("does not emit branch_start without a matching branch_complete when abort fires during stagger", async () => {
+		const controller = new AbortController();
+
+		let callCount = 0;
+		const runAgent: BranchRunOptions["runAgent"] = async function* () {
+			callCount++;
+			if (callCount === 1) {
+				yield ASSISTANT_EVENT;
+				yield {
+					type: "branch_request",
+					alternatives: ["A", "B", "C"],
+				} satisfies SandcasterEvent;
+			} else {
+				yield {
+					type: "result",
+					content: "done",
+					costUsd: 0.01,
+					numTurns: 1,
+				};
+			}
+		};
+
+		const gen = runBranchedAgent({
+			request: { prompt: "hello" },
+			runAgent,
+			// Stagger long enough that abort lands during the wait between branches
+			config: { branching: { staggerDelayMs: 100 } },
+			signal: controller.signal,
+		});
+
+		// Abort while the orchestrator is waiting in stagger between branches
+		setTimeout(() => controller.abort(), 50);
+
+		const events: SandcasterEvent[] = [];
+		try {
+			for await (const event of gen) {
+				events.push(event);
+			}
+		} catch {
+			// abort may throw
+		}
+
+		const starts = events.filter((e) => e.type === "branch_start");
+		const completes = events.filter((e) => e.type === "branch_complete");
+		// Lifecycle invariant: every branch_start has a matching branch_complete
+		expect(starts.length).toBe(completes.length);
+	});
 });
 
 // ---------------------------------------------------------------------------
