@@ -831,6 +831,42 @@ describe("SessionManager", () => {
 		}
 	});
 
+	it("createSession releases reservedSlots when store.create() throws", async () => {
+		// store.create() throwing must not leak the reservation counter,
+		// otherwise capacity is permanently reduced for the lifetime of the
+		// manager. Capacity=1 + one throwing create + one successful create
+		// would fail with SESSION_CAPACITY_EXCEEDED if the slot leaked.
+		const failingStore = createFakeStore();
+		let failNext = true;
+		const originalCreate = failingStore.create.bind(failingStore);
+		failingStore.create = (record) => {
+			if (failNext) {
+				failNext = false;
+				throw new Error("store full");
+			}
+			originalCreate(record);
+		};
+
+		const manager = new SessionManager({
+			store: failingStore,
+			sandboxFactory: vi.fn().mockResolvedValue(createFakeSandbox()),
+			runAgent: createFakeRunAgent(),
+			maxActiveSessions: 1,
+		});
+
+		// First call: store.create throws — must not leak reservedSlots
+		await expect(
+			manager.createSession(makeSessionCreateRequest({ prompt: undefined })),
+		).rejects.toThrow("store full");
+
+		// Second call: should still succeed since the slot was released
+		const s = await manager.createSession(
+			makeSessionCreateRequest({ prompt: undefined }),
+		);
+		await collectEvents(s.events);
+		expect(manager.getSession(s.sessionId)?.status).toBe("active");
+	});
+
 	// -------------------------------------------------------------------------
 	// Test 16: sendMessage throws SESSION_NOT_FOUND for unknown session
 	// -------------------------------------------------------------------------
