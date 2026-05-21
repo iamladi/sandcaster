@@ -31,7 +31,7 @@
 		"@protobufjs/utf8": ">=1.1.1",
 		"axios": ">=1.15.2",
 		"basic-ftp": ">=5.2.1",
-		"brace-expansion": ">=2.0.3",
+		"brace-expansion": ">=5.0.6",
 		"defu": ">=6.1.5",
 		"devalue": ">=5.8.1",
 		"fast-uri": ">=3.1.2",
@@ -46,6 +46,7 @@
 		"protobufjs": ">=7.5.6",
 		"smol-toml": ">=1.6.1",
 		"undici": "^7.24.0",
+		"ws": ">=8.20.1",
 		"yaml": ">=2.8.3"
 	},
 	"dependencies": {

@@ -233,11 +233,14 @@ export class SessionManager {
 			totalTurns: 0,
 			name: request.sessionConfig?.name,
 		};
-		this.opts.store.create(record);
 
 		let instance: SandboxInstance | null = null;
+		let recordCreated = false;
 
 		try {
+			this.opts.store.create(record);
+			recordCreated = true;
+
 			instance = await this.opts.sandboxFactory({
 				provider: sandboxProvider,
 				template: undefined,
@@ -247,7 +250,9 @@ export class SessionManager {
 			});
 		} catch (err) {
 			this.reservedSlots--;
-			this.opts.store.update(sessionId, { status: "failed" });
+			if (recordCreated) {
+				this.opts.store.update(sessionId, { status: "failed" });
+			}
 			throw err;
 		}
 
