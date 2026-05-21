@@ -179,6 +179,20 @@ export function createDockerProvider(): SandboxProvider {
 							};
 						}
 
+						// execa v9 with cancelSignal sets isCanceled=true and leaves
+						// exitCode undefined. Map to -1 so callers checking
+						// exitCode !== 0 detect failure (mirrors timedOut handling).
+						const isCanceled =
+							(result as unknown as { isCanceled?: boolean }).isCanceled ??
+							false;
+						if (isCanceled) {
+							return {
+								stdout: result.stdout ?? "",
+								stderr: "Command canceled by abort signal",
+								exitCode: -1,
+							};
+						}
+
 						const stdout = result.stdout ?? "";
 						const stderr = result.stderr ?? "";
 

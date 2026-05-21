@@ -458,6 +458,35 @@ describe("createDockerProvider", () => {
 		);
 	});
 
+	it("commands.run returns exitCode -1 and cancel message when execa isCanceled", async () => {
+		const containerId = "canceled-container";
+		setupDefaultMocks(containerId);
+
+		const provider = createDockerProvider();
+		const result = await provider.create({ template: "node:20" });
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+
+		vi.clearAllMocks();
+		// execa with cancelSignal returns isCanceled=true and exitCode undefined
+		mockExeca.mockResolvedValue({
+			stdout: "",
+			stderr: "",
+			exitCode: undefined,
+			isCanceled: true,
+			timedOut: false,
+		});
+
+		const controller = new AbortController();
+		const cmdResult = await result.instance.commands.run("sleep 100", {
+			signal: controller.signal,
+		});
+
+		expect(cmdResult.exitCode).toBe(-1);
+		expect(cmdResult.stderr).toMatch(/cancel/i);
+	});
+
 	it("commands.run returns exitCode -1 and timeout message when execa timedOut", async () => {
 		const containerId = "timed-container";
 		setupDefaultMocks(containerId);
