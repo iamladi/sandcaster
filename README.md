@@ -295,7 +295,7 @@ File transfers enforce per-file (25MB) and total (50MB) size limits with path tr
 
 ### Cleanup
 
-All secondary sandboxes are killed automatically when the run completes (secondaries first, primary last). A `SIGTERM` handler ensures cleanup on graceful shutdown.
+All secondary sandboxes are killed automatically when the run completes (secondaries first, primary last). A `SIGTERM` handler ensures cleanup on graceful shutdown in all modes (composite and non-composite).
 
 ## Chat bots
 
