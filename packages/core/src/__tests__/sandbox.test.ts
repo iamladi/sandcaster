@@ -1257,8 +1257,7 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		] as number;
 		const ipcCleanupOrder = instance.commands.run.mock.invocationCallOrder[
 			instance.commands.run.mock.calls.findIndex(
-				(c) =>
-					typeof c[0] === "string" && c[0].includes("sandcaster-ipc-"),
+				(c) => typeof c[0] === "string" && c[0].includes("sandcaster-ipc-"),
 			)
 		] as number;
 
