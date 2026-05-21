@@ -1225,6 +1225,47 @@ describe("runAgentInSandbox — composite orchestration", () => {
 		onSpy.mockRestore();
 	});
 
+	it("registers SIGTERM handler before any await in composite pre-work", async () => {
+		// In composite mode, sandbox.ts runs `await instance.commands.run("rm -f
+		// /tmp/sandcaster-ipc-*.json*")` to clear stale IPC files. If SIGTERM
+		// arrives during that await and no handler is registered, Node exits
+		// immediately and the sandbox leaks. The handler must be installed
+		// before the first awaited operation following sandbox creation.
+		const instance = makeCompositeInstance([]);
+		registerFakeProvider(instance);
+
+		const onSpy = vi.spyOn(process, "once");
+
+		for await (const _ of runAgentInSandbox({
+			request: makeRequest({ composite: { maxSandboxes: 2 } }),
+		})) {
+			// consume
+		}
+
+		const sigtermCall = onSpy.mock.calls.find((call) => call[0] === "SIGTERM");
+		expect(sigtermCall).toBeDefined();
+
+		// Find the IPC cleanup call to instance.commands.run.
+		const ipcCleanupCall = instance.commands.run.mock.calls.find(
+			(call) =>
+				typeof call[0] === "string" && call[0].includes("sandcaster-ipc-"),
+		);
+		expect(ipcCleanupCall).toBeDefined();
+
+		const sigtermOrder = onSpy.mock.invocationCallOrder[
+			onSpy.mock.calls.findIndex((c) => c[0] === "SIGTERM")
+		] as number;
+		const ipcCleanupOrder = instance.commands.run.mock.invocationCallOrder[
+			instance.commands.run.mock.calls.findIndex(
+				(c) => typeof c[0] === "string" && c[0].includes("sandcaster-ipc-"),
+			)
+		] as number;
+
+		expect(sigtermOrder).toBeLessThan(ipcCleanupOrder);
+
+		onSpy.mockRestore();
+	});
+
 	it("registers a SIGTERM handler that kills the instance in non-composite mode", async () => {
 		// Without a SIGTERM handler, Node exits immediately on signal and the
 		// `finally` block that calls `instance.kill()` never runs, leaving the
