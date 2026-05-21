@@ -277,6 +277,21 @@ export async function* runAgentInSandbox(
 	let compositeNonce: string | undefined;
 	let resolvedComposite: ReturnType<typeof resolveCompositeConfig> | undefined;
 
+	// Register SIGTERM handler for graceful cleanup BEFORE any await that
+	// follows sandbox creation. Required for both modes: without a handler,
+	// Node exits immediately on SIGTERM and the `finally` block at the bottom
+	// of this function never runs — leaving the sandbox alive until the
+	// provider's idle timeout (5 min on E2B). Composite mode kills the whole
+	// pool (set below); non-composite kills the single instance.
+	const sigTermHandler: () => Promise<void> = async () => {
+		if (pool !== undefined) {
+			await pool.killAll();
+		} else {
+			await instance.kill();
+		}
+	};
+	process.once("SIGTERM", sigTermHandler);
+
 	if (compositeActive) {
 		resolvedComposite = resolveCompositeConfig(
 			config?.composite,
@@ -326,20 +341,6 @@ export async function* runAgentInSandbox(
 		// Stale IPC cleanup
 		await instance.commands.run(`rm -f /tmp/sandcaster-ipc-*.json*`);
 	}
-
-	// Register SIGTERM handler for graceful cleanup. Required for both modes:
-	// without a handler, Node exits immediately on SIGTERM and the `finally`
-	// block at the bottom of this function never runs — leaving the sandbox
-	// alive until the provider's idle timeout (5 min on E2B). Composite mode
-	// kills the whole pool; non-composite kills the single instance.
-	const sigTermHandler: () => Promise<void> = async () => {
-		if (pool !== undefined) {
-			await pool.killAll();
-		} else {
-			await instance.kill();
-		}
-	};
-	process.once("SIGTERM", sigTermHandler);
 
 	// Runner directory — use instance.workDir so providers with restricted
 	// filesystems (e.g. Vercel) can write to a writable location.
