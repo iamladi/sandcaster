@@ -1,0 +1,16 @@
+[[IgnoredVulns]]
+id = "MAL-2026-3432"
+reason = """
+Transitive dependency via @mariozechner/pi-ai. The OSV advisory's SEMVER
+range covers all versions of @mistralai/mistralai with no fixed event,
+but the confirmed-malicious releases per the advisory's `versions` list
+are only 2.2.2, 2.2.3, and 2.2.4 (TeamPCP / "Mini Shai-Hulud" worm).
+
+The lockfile pins @mistralai/mistralai to 1.15.1 via a root `overrides`
+entry, which is outside the confirmed-malicious set. Latest pi-ai
+(0.73.1) ranges to ^2.2.0 and would pull a confirmed-malicious version,
+so we intentionally hold the older transitive.
+
+Revisit when @mistralai/mistralai publishes a clean fixed version with
+a proper SEMVER range, or when pi-ai removes the dependency.
+"""
