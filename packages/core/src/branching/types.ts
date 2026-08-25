@@ -61,16 +61,6 @@ export const EvaluationResultSchema = z.object({
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 
 // ---------------------------------------------------------------------------
-// BranchOverride — per-branch provider/model/sandboxProvider override
-// ---------------------------------------------------------------------------
-
-export interface BranchOverride {
-	provider?: string;
-	model?: string;
-	sandboxProvider?: string;
-}
-
-// ---------------------------------------------------------------------------
 // Evaluator — interface for branch result evaluation
 // ---------------------------------------------------------------------------
 
