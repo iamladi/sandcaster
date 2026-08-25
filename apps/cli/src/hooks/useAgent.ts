@@ -1,5 +1,4 @@
 import type { SandcasterEvent } from "@sandcaster/core";
-import { useEffect, useReducer } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,44 +115,4 @@ export function reduceAgentState(
 		events,
 		currentTurn: [...state.currentTurn, event],
 	};
-}
-
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
-
-export function useAgent(
-	eventSource: AsyncIterable<SandcasterEvent> | null,
-): AgentState {
-	const [state, dispatch] = useReducer(reduceAgentState, initialAgentState);
-
-	useEffect(() => {
-		if (!eventSource) return;
-
-		let cancelled = false;
-
-		async function consume() {
-			try {
-				for await (const event of eventSource as AsyncIterable<SandcasterEvent>) {
-					if (cancelled) break;
-					dispatch(event);
-				}
-			} catch (err) {
-				if (!cancelled) {
-					dispatch({
-						type: "error",
-						content: err instanceof Error ? err.message : "Stream error",
-					});
-				}
-			}
-		}
-
-		consume();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [eventSource]);
-
-	return state;
 }
