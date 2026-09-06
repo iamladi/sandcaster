@@ -1,16 +1,23 @@
 [[IgnoredVulns]]
-id = "MAL-2026-3432"
+id = "GHSA-4g3v-8h47-v7g6"
 reason = """
-Transitive dependency via @mariozechner/pi-ai. The OSV advisory's SEMVER
-range covers all versions of @mistralai/mistralai with no fixed event,
-but the confirmed-malicious releases per the advisory's `versions` list
-are only 2.2.2, 2.2.3, and 2.2.4 (TeamPCP / "Mini Shai-Hulud" worm).
+Requires astro 7.1.0 (major version bump). astro is pinned to ^6.x in
+apps/web; upgrading to 7.x requires a dedicated migration effort outside
+the scope of this PR.
+"""
 
-The lockfile pins @mistralai/mistralai to 1.15.1 via a root `overrides`
-entry, which is outside the confirmed-malicious set. Latest pi-ai
-(0.73.1) ranges to ^2.2.0 and would pull a confirmed-malicious version,
-so we intentionally hold the older transitive.
+[[IgnoredVulns]]
+id = "GHSA-7pw4-f3q4-r2p2"
+reason = """
+Requires astro 7.0.4 (major version bump). astro is pinned to ^6.x in
+apps/web; upgrading to 7.x requires a dedicated migration effort outside
+the scope of this PR.
+"""
 
-Revisit when @mistralai/mistralai publishes a clean fixed version with
-a proper SEMVER range, or when pi-ai removes the dependency.
+[[IgnoredVulns]]
+id = "GHSA-f48w-9m4c-m7f5"
+reason = """
+Requires astro 7.0.6 (major version bump). astro is pinned to ^6.x in
+apps/web; upgrading to 7.x requires a dedicated migration effort outside
+the scope of this PR.
 """

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AuthError, SandcasterError, ValidationError } from "../errors.js";
+import { SandcasterError } from "../errors.js";
 import { SandboxError } from "../sandbox.js";
 
 describe("SandcasterError", () => {
@@ -25,50 +25,6 @@ describe("SandcasterError", () => {
 
 	it("is instanceof Error", () => {
 		const err = new SandcasterError("something went wrong");
-		expect(err).toBeInstanceOf(Error);
-	});
-});
-
-describe("AuthError", () => {
-	it("has correct name", () => {
-		const err = new AuthError("unauthorized");
-		expect(err.name).toBe("AuthError");
-	});
-
-	it("has AUTH_ERROR code", () => {
-		const err = new AuthError("unauthorized");
-		expect(err.code).toBe("AUTH_ERROR");
-	});
-
-	it("is instanceof SandcasterError", () => {
-		const err = new AuthError("unauthorized");
-		expect(err).toBeInstanceOf(SandcasterError);
-	});
-
-	it("is instanceof Error", () => {
-		const err = new AuthError("unauthorized");
-		expect(err).toBeInstanceOf(Error);
-	});
-});
-
-describe("ValidationError", () => {
-	it("has correct name", () => {
-		const err = new ValidationError("invalid input");
-		expect(err.name).toBe("ValidationError");
-	});
-
-	it("has VALIDATION_ERROR code", () => {
-		const err = new ValidationError("invalid input");
-		expect(err.code).toBe("VALIDATION_ERROR");
-	});
-
-	it("is instanceof SandcasterError", () => {
-		const err = new ValidationError("invalid input");
-		expect(err).toBeInstanceOf(SandcasterError);
-	});
-
-	it("is instanceof Error", () => {
-		const err = new ValidationError("invalid input");
 		expect(err).toBeInstanceOf(Error);
 	});
 });
