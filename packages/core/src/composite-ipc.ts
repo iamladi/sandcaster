@@ -100,8 +100,3 @@ export function ipcResponsePath(requestId: string): string {
 export function ipcTempPath(requestId: string): string {
 	return `/tmp/sandcaster-ipc-${requestId}.json.tmp`;
 }
-
-/**
- * Regex pattern that matches stale IPC files in /tmp for cleanup.
- */
-export const STALE_IPC_PATTERN = /\/tmp\/sandcaster-ipc-[^/]*\.json(?:\.tmp)?$/;

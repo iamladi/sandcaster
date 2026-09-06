@@ -5,7 +5,6 @@ import {
 	ipcResponsePath,
 	ipcTempPath,
 	parseCompositeRequest,
-	STALE_IPC_PATTERN,
 	serializeCompositeResponse,
 	validateNonce,
 } from "../composite-ipc.js";
@@ -246,27 +245,5 @@ describe("ipcTempPath", () => {
 		expect(ipcTempPath("req-999-xyz")).toBe(
 			"/tmp/sandcaster-ipc-req-999-xyz.json.tmp",
 		);
-	});
-});
-
-// ---------------------------------------------------------------------------
-// STALE_IPC_PATTERN
-// ---------------------------------------------------------------------------
-
-describe("STALE_IPC_PATTERN", () => {
-	it("matches a .json IPC file", () => {
-		expect(STALE_IPC_PATTERN.test("/tmp/sandcaster-ipc-abc123.json")).toBe(
-			true,
-		);
-	});
-
-	it("matches a .json.tmp IPC file", () => {
-		expect(STALE_IPC_PATTERN.test("/tmp/sandcaster-ipc-abc123.json.tmp")).toBe(
-			true,
-		);
-	});
-
-	it("does not match unrelated paths", () => {
-		expect(STALE_IPC_PATTERN.test("/tmp/something-else.json")).toBe(false);
 	});
 });
