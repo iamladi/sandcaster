@@ -78,10 +78,6 @@ export type SandcasterEvent =
 export function createEventTranslator(): {
 	translate: (event: AgentEvent) => SandcasterEvent[];
 } {
-	// Accumulated text per contentIndex, keyed by contentIndex number
-	const textAccumulator = new Map<number, string>();
-	const thinkingAccumulator = new Map<number, string>();
-
 	function translate(event: AgentEvent): SandcasterEvent[] {
 		switch (event.type) {
 			case "agent_start": {
@@ -142,28 +138,22 @@ export function createEventTranslator(): {
 
 				switch (assistantEvent.type) {
 					case "text_delta": {
-						const { contentIndex, delta } = assistantEvent;
-						const current = textAccumulator.get(contentIndex) ?? "";
-						textAccumulator.set(contentIndex, current + delta);
+						const { delta } = assistantEvent;
 						return [{ type: "assistant", subtype: "delta", content: delta }];
 					}
 
 					case "text_end": {
-						const { contentIndex, content } = assistantEvent;
-						textAccumulator.delete(contentIndex);
+						const { content } = assistantEvent;
 						return [{ type: "assistant", subtype: "complete", content }];
 					}
 
 					case "thinking_delta": {
-						const { contentIndex, delta } = assistantEvent;
-						const current = thinkingAccumulator.get(contentIndex) ?? "";
-						thinkingAccumulator.set(contentIndex, current + delta);
+						const { delta } = assistantEvent;
 						return [{ type: "thinking", subtype: "delta", content: delta }];
 					}
 
 					case "thinking_end": {
-						const { contentIndex, content } = assistantEvent;
-						thinkingAccumulator.delete(contentIndex);
+						const { content } = assistantEvent;
 						return [{ type: "thinking", subtype: "complete", content }];
 					}
 
