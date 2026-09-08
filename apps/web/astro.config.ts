@@ -8,7 +8,6 @@ export default defineConfig({
 	output: "static",
 	integrations: [mdx(), sitemap()],
 	vite: {
-		// @ts-expect-error Vite version mismatch between Astro and @tailwindcss/vite
 		plugins: [tailwindcss()],
 	},
 });
