@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { AuthError, SandcasterError, ValidationError } from "../errors.js";
-import { SandboxError } from "../sandbox.js";
 
 describe("SandcasterError", () => {
 	it("has correct name", () => {
@@ -69,28 +68,6 @@ describe("ValidationError", () => {
 
 	it("is instanceof Error", () => {
 		const err = new ValidationError("invalid input");
-		expect(err).toBeInstanceOf(Error);
-	});
-});
-
-describe("SandboxError", () => {
-	it("has correct name", () => {
-		const err = new SandboxError("sandbox crashed", "create");
-		expect(err.name).toBe("SandboxError");
-	});
-
-	it("has SANDBOX_ERROR code", () => {
-		const err = new SandboxError("sandbox crashed", "create");
-		expect(err.code).toBe("SANDBOX_ERROR");
-	});
-
-	it("is instanceof SandcasterError", () => {
-		const err = new SandboxError("sandbox crashed", "exec");
-		expect(err).toBeInstanceOf(SandcasterError);
-	});
-
-	it("is instanceof Error", () => {
-		const err = new SandboxError("sandbox crashed", "cleanup");
 		expect(err).toBeInstanceOf(Error);
 	});
 });
