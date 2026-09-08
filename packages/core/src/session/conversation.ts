@@ -60,13 +60,6 @@ export async function compactHistory(
 }
 
 /**
- * Clear all history. Returns a fresh empty array.
- */
-export function clearHistory(): ConversationTurn[] {
-	return [];
-}
-
-/**
  * Format history for injection into agent config.
  * If conversationSummary is provided, prepends it as a summary block.
  * Returns empty string when there is no content to show.

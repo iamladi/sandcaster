@@ -1,16 +1,64 @@
 [[IgnoredVulns]]
-id = "MAL-2026-3432"
+id = "GHSA-4g3v-8h47-v7g6"
 reason = """
-Transitive dependency via @mariozechner/pi-ai. The OSV advisory's SEMVER
-range covers all versions of @mistralai/mistralai with no fixed event,
-but the confirmed-malicious releases per the advisory's `versions` list
-are only 2.2.2, 2.2.3, and 2.2.4 (TeamPCP / "Mini Shai-Hulud" worm).
+astro fix requires upgrading to ^7.x (breaking major); apps/web is pinned to ^6.x.
+Acceptable until a planned astro major-version upgrade.
+"""
 
-The lockfile pins @mistralai/mistralai to 1.15.1 via a root `overrides`
-entry, which is outside the confirmed-malicious set. Latest pi-ai
-(0.73.1) ranges to ^2.2.0 and would pull a confirmed-malicious version,
-so we intentionally hold the older transitive.
+[[IgnoredVulns]]
+id = "GHSA-7pw4-f3q4-r2p2"
+reason = """
+astro fix requires upgrading to ^7.x (breaking major); apps/web is pinned to ^6.x.
+Acceptable until a planned astro major-version upgrade.
+"""
 
-Revisit when @mistralai/mistralai publishes a clean fixed version with
-a proper SEMVER range, or when pi-ai removes the dependency.
+[[IgnoredVulns]]
+id = "GHSA-f48w-9m4c-m7f5"
+reason = """
+astro fix requires upgrading to ^7.x (breaking major); apps/web is pinned to ^6.x.
+Acceptable until a planned astro major-version upgrade.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-fx2h-pf6j-xcff"
+reason = """
+Affects vite 7.x (transitive via astro ^6.x, which requires vite ^7) and vite 8.x
+(transitive via vitest's internal peer). The 7.x instance cannot be upgraded without
+an astro major-version bump; the 8.x instance is locked by vitest's peer range.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-v6wh-96g9-6wx3"
+reason = """
+Affects vite 7.x (transitive via astro ^6.x, which requires vite ^7) and vite 8.x
+(transitive via vitest's internal peer). The 7.x instance cannot be upgraded without
+an astro major-version bump; the 8.x instance is locked by vitest's peer range.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-52cp-r559-cp3m"
+reason = """
+js-yaml 3.x and 4.x are transitive dependencies; upgrading across the full dep graph
+to eliminate both affected versions would require unrelated major-version changes.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-5p4m-2wfm-xmqj"
+reason = """
+js-yaml 3.x and 4.x are transitive dependencies; upgrading across the full dep graph
+to eliminate both affected versions would require unrelated major-version changes.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-h67p-54hq-rp68"
+reason = """
+js-yaml 3.x and 4.x are transitive dependencies; upgrading across the full dep graph
+to eliminate both affected versions would require unrelated major-version changes.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-f88m-g3jw-g9cj"
+reason = """
+sharp fix requires 0.35.0 (new major API), apps/web pins ^0.33.x and astro pins
+^0.34.x as optional; upgrading would require coordinated changes across both.
 """
