@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	addTurn,
 	buildAgentContext,
-	clearHistory,
 	compactHistory,
 } from "../../session/conversation.js";
 import type { ConversationTurn } from "../../session/types.js";
@@ -149,16 +148,6 @@ describe("compactHistory", () => {
 		await compactHistory(history, summarizer, "claude-opus-4-5");
 
 		expect(summarizer).toHaveBeenCalledWith(history, "claude-opus-4-5");
-	});
-});
-
-// ---------------------------------------------------------------------------
-// clearHistory
-// ---------------------------------------------------------------------------
-
-describe("clearHistory", () => {
-	it("returns an empty array", () => {
-		expect(clearHistory()).toEqual([]);
 	});
 });
 
