@@ -46,11 +46,7 @@ import {
 	extractGeneratedFiles,
 	uploadFiles,
 } from "../files.js";
-import {
-	runAgentInSandbox,
-	runAgentOnInstance,
-	SandboxError,
-} from "../sandbox.js";
+import { runAgentInSandbox, runAgentOnInstance } from "../sandbox.js";
 import type { SandboxInstance, SandboxProvider } from "../sandbox-provider.js";
 import { registerSandboxProvider, resetRegistry } from "../sandbox-registry.js";
 import type { QueryRequest } from "../schemas.js";
@@ -670,31 +666,6 @@ describe("runAgentInSandbox", () => {
 		for (const event of errorEvents) {
 			expect(JSON.stringify(event)).not.toContain("sk-ant-secret-value");
 		}
-	});
-
-	// -------------------------------------------------------------------------
-	// SandboxError class
-	// -------------------------------------------------------------------------
-
-	it("SandboxError has correct name", () => {
-		const err = new SandboxError("failed", "create");
-		expect(err.name).toBe("SandboxError");
-	});
-
-	it("SandboxError has correct stage", () => {
-		const err = new SandboxError("failed", "upload");
-		expect(err.stage).toBe("upload");
-	});
-
-	it("SandboxError stores cause", () => {
-		const cause = new Error("original");
-		const err = new SandboxError("failed", "exec", cause);
-		expect(err.cause).toBe(cause);
-	});
-
-	it("SandboxError is instanceof Error", () => {
-		const err = new SandboxError("failed", "create");
-		expect(err).toBeInstanceOf(Error);
 	});
 
 	// -------------------------------------------------------------------------

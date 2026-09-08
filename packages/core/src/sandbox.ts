@@ -10,7 +10,6 @@ import {
 	serializeCompositeResponse,
 	validateNonce,
 } from "./composite-ipc.js";
-import { SandcasterError } from "./errors.js";
 import {
 	createExtractionMarker,
 	extractGeneratedFiles,
@@ -34,7 +33,7 @@ import type {
 
 // ---------------------------------------------------------------------------
 // Runner bundle — lazy-loaded on first use so that importing this module
-// (e.g. for SandboxError) doesn't trigger a readFileSync side effect.
+// doesn't trigger a readFileSync side effect.
 // ---------------------------------------------------------------------------
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,21 +46,6 @@ function _getRunnerBundle(): string {
 		);
 	}
 	return _runnerBundle;
-}
-
-// ---------------------------------------------------------------------------
-// SandboxError
-// ---------------------------------------------------------------------------
-
-export class SandboxError extends SandcasterError {
-	constructor(
-		message: string,
-		public readonly stage: "create" | "upload" | "exec" | "cleanup",
-		public readonly cause?: unknown,
-	) {
-		super(message, "SANDBOX_ERROR");
-		this.name = "SandboxError";
-	}
 }
 
 // ---------------------------------------------------------------------------
