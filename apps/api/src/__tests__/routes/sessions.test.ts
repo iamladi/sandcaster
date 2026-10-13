@@ -57,7 +57,10 @@ function createInMemorySessionStore(): ISessionStore {
 			}
 		},
 		list(limit = 50) {
-			return order.slice(-limit).reverse().map((r) => ({ ...r }));
+			return order
+				.slice(-limit)
+				.reverse()
+				.map((r) => ({ ...r }));
 		},
 		delete(id) {
 			const existing = records.get(id);
