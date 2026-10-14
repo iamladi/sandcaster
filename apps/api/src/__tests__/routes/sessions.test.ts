@@ -9,6 +9,43 @@ import { describe, expect, test, vi } from "vitest";
 import { createApp } from "../../app.js";
 
 // ---------------------------------------------------------------------------
+// In-memory session store (test fixture — no disk I/O)
+// ---------------------------------------------------------------------------
+
+const ACTIVE_STATUSES = new Set(["initializing", "active", "running"]);
+
+function createInMemorySessionStore(): ISessionStore {
+	const records = new Map<string, SessionRecord>();
+	return {
+		create(record: SessionRecord): void {
+			records.set(record.id, { ...record });
+		},
+		get(id: string): SessionRecord | undefined {
+			return records.get(id);
+		},
+		update(id: string, updates: Partial<SessionRecord>): void {
+			const existing = records.get(id);
+			if (existing) {
+				records.set(id, { ...existing, ...updates });
+			}
+		},
+		list(limit?: number): SessionRecord[] {
+			const all = [...records.values()];
+			return limit !== undefined ? all.slice(0, limit) : all;
+		},
+		delete(id: string): void {
+			records.delete(id);
+		},
+		getActiveRecords(): SessionRecord[] {
+			return [...records.values()].filter((r) => ACTIVE_STATUSES.has(r.status));
+		},
+		activeCount(): number {
+			return this.getActiveRecords().length;
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Fake sandbox factory
 // ---------------------------------------------------------------------------
 
