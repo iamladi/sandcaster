@@ -1,8 +1,9 @@
 import {
-	createSessionStore,
+	type ISessionStore,
 	type SandboxInstance,
 	type SandcasterEvent,
 	SessionManager,
+	type SessionRecord,
 } from "@sandcaster/core";
 import { describe, expect, test, vi } from "vitest";
 import { createApp } from "../../app.js";
@@ -35,10 +36,50 @@ function createFakeSandbox(): SandboxInstance {
 	};
 }
 
+function createInMemorySessionStore(): ISessionStore {
+	const records = new Map<string, SessionRecord>();
+	const order: SessionRecord[] = [];
+	const active = new Set(["initializing", "active", "running"]);
+	return {
+		create(record) {
+			records.set(record.id, record);
+			order.push(record);
+		},
+		get(id) {
+			return records.get(id);
+		},
+		update(id, updates) {
+			const existing = records.get(id);
+			if (existing) {
+				Object.assign(existing, updates, {
+					lastActivityAt: new Date().toISOString(),
+				});
+			}
+		},
+		list(limit = 50) {
+			return order
+				.slice(-limit)
+				.reverse()
+				.map((r) => ({ ...r }));
+		},
+		delete(id) {
+			const existing = records.get(id);
+			if (!existing) return;
+			const idx = order.indexOf(existing);
+			if (idx !== -1) order.splice(idx, 1);
+			records.delete(id);
+		},
+		getActiveRecords() {
+			return order.filter((r) => active.has(r.status));
+		},
+		activeCount() {
+			return order.filter((r) => active.has(r.status)).length;
+		},
+	};
+}
+
 function createTestSessionManager() {
-	const store = createSessionStore({
-		path: `/tmp/sandcaster-test-${crypto.randomUUID()}.jsonl`,
-	});
+	const store = createInMemorySessionStore();
 
 	return new SessionManager({
 		store,
