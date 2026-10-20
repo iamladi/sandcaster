@@ -78,23 +78,11 @@ function createFakeStore(
 			const ids = order.slice(-limit).reverse();
 			return ids.map((id) => ({ ...records.get(id)! }));
 		},
-		delete(id) {
-			records.delete(id);
-			const idx = order.indexOf(id);
-			if (idx !== -1) order.splice(idx, 1);
-		},
 		getActiveRecords() {
 			const activeStatuses = new Set(["initializing", "active", "running"]);
 			return order
 				.map((id) => records.get(id)!)
 				.filter((r) => r && activeStatuses.has(r.status));
-		},
-		activeCount() {
-			const activeStatuses = new Set(["initializing", "active", "running"]);
-			return order.filter((id) => {
-				const r = records.get(id);
-				return r && activeStatuses.has(r.status);
-			}).length;
 		},
 	};
 }

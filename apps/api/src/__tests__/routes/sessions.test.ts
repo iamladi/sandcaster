@@ -33,14 +33,8 @@ function createInMemorySessionStore(): ISessionStore {
 			const all = [...records.values()];
 			return limit !== undefined ? all.slice(0, limit) : all;
 		},
-		delete(id: string): void {
-			records.delete(id);
-		},
 		getActiveRecords(): SessionRecord[] {
 			return [...records.values()].filter((r) => ACTIVE_STATUSES.has(r.status));
-		},
-		activeCount(): number {
-			return this.getActiveRecords().length;
 		},
 	};
 }
@@ -99,18 +93,8 @@ function createInMemorySessionStore(): ISessionStore {
 				.reverse()
 				.map((r) => ({ ...r }));
 		},
-		delete(id) {
-			const existing = records.get(id);
-			if (!existing) return;
-			const idx = order.indexOf(existing);
-			if (idx !== -1) order.splice(idx, 1);
-			records.delete(id);
-		},
 		getActiveRecords() {
 			return order.filter((r) => active.has(r.status));
-		},
-		activeCount() {
-			return order.filter((r) => active.has(r.status)).length;
 		},
 	};
 }

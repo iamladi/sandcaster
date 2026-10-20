@@ -2,7 +2,7 @@ import type {
 	SandboxInstance,
 	SandboxProviderName,
 } from "../sandbox-provider.js";
-import type { SandcasterEvent, Session, SessionCommand } from "../schemas.js";
+import type { SandcasterEvent, Session } from "../schemas.js";
 
 /** A single conversation turn */
 export interface ConversationTurn {
@@ -61,11 +61,8 @@ export interface ISessionStore {
 		updates: Partial<import("../schemas.js").SessionRecord>,
 	): void;
 	list(limit?: number): import("../schemas.js").SessionRecord[];
-	delete(id: string): void;
 	/** Returns all records with active/running status (for startup cleanup) */
 	getActiveRecords(): import("../schemas.js").SessionRecord[];
-	/** Current count of non-expired/ended sessions in memory */
-	activeCount(): number;
 }
 
 /** Function signature for LLM summarization (injected dependency for /compact) */
@@ -73,12 +70,6 @@ export type LlmSummarizer = (
 	turns: ConversationTurn[],
 	model?: string,
 ) => Promise<string>;
-
-/** Session command executor function */
-export type CommandExecutor = (
-	session: ActiveSession,
-	command: SessionCommand,
-) => AsyncGenerator<SandcasterEvent>;
 
 // ---------------------------------------------------------------------------
 // Session ID generator
