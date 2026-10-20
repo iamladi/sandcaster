@@ -162,14 +162,8 @@ function createInMemorySessionStore(): ISessionStore {
 			const all = [...records.values()];
 			return limit !== undefined ? all.slice(0, limit) : all;
 		},
-		delete(id: string): void {
-			records.delete(id);
-		},
 		getActiveRecords(): SessionRecord[] {
 			return [...records.values()].filter((r) => ACTIVE_STATUSES.has(r.status));
-		},
-		activeCount(): number {
-			return this.getActiveRecords().length;
 		},
 	};
 }
