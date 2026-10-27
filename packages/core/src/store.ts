@@ -26,7 +26,6 @@ export interface IRunStore {
 		},
 	): void;
 	fail(id: string, error: string, durationSecs?: number): void;
-	addFeedback(id: string, feedback: string, user: string): void;
 	list(limit?: number): Run[];
 }
 
@@ -139,24 +138,13 @@ export function createRunStore(opts?: {
 		appendToFile(run);
 	}
 
-	function addFeedback(id: string, feedback: string, user: string): void {
-		const run = index.get(id);
-		if (run === undefined) {
-			console.warn(`RunStore.addFeedback: unknown run id=${id}`);
-			return;
-		}
-		run.feedback = feedback;
-		run.feedbackUser = user;
-		appendToFile(run);
-	}
-
 	function list(limit = 50): Run[] {
 		// newest-first, up to limit, return plain copies
 		const slice = order.slice(-limit).reverse();
 		return slice.map((r) => ({ ...r }));
 	}
 
-	return { create, complete, fail, addFeedback, list };
+	return { create, complete, fail, list };
 }
 
 // ---------------------------------------------------------------------------
