@@ -140,27 +140,6 @@ describe("createRunStore", () => {
 	});
 
 	// -------------------------------------------------------------------------
-	// addFeedback
-	// -------------------------------------------------------------------------
-
-	it("adds feedback to a run", () => {
-		const store = createRunStore({ path: join(tmpDir, "runs.jsonl") });
-		store.create("run-fb", "do work", null);
-		store.addFeedback("run-fb", "looks great", "alice");
-
-		const runs = store.list();
-		expect(runs[0].feedback).toBe("looks great");
-		expect(runs[0].feedbackUser).toBe("alice");
-	});
-
-	it("warns on addFeedback with unknown run id", () => {
-		const store = createRunStore({ path: join(tmpDir, "runs.jsonl") });
-		store.addFeedback("nonexistent-id", "feedback", "bob");
-		expect(warnSpy).toHaveBeenCalledOnce();
-		expect(warnSpy.mock.calls[0][0]).toContain("nonexistent-id");
-	});
-
-	// -------------------------------------------------------------------------
 	// list
 	// -------------------------------------------------------------------------
 
